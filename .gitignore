@@ -1,2 +1,7 @@
 *.JPG
 .idea/*
+*.pt
+receive/*
+temp/*
+send/*
+*.pyc
