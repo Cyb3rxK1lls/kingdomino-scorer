@@ -1,51 +1,36 @@
 from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
 from PIL import Image
+from models.detect import run
 import os
 
 app = Flask(__name__)
 api = Api(app)
 
 
-class Hello(Resource):
-
-    def __init__(self):
-        self.requests = 0
-
-    def get(self):
-        self.requests += 1
-        return "hello, world!"
-
-    def post(self):
-        self.requests += 1
-        data = request.get_json()
-        return jsonify({'data_received': data}), 201
-
-
 class File(Resource):
 
-    def __init__(self):
-        self.files = 0
-
-    def get(self):
-        name = request.args.get('name')
-        return f"your name is {name }!! {self.files['name']}"
-
     def post(self):
-        self.files += 1
-        file = request.files['image']
+        img_file = request.files['image']
 
         # Read the image via file.stream
-        img = Image.open(file.stream)
+        img = Image.open(img_file.stream)
         img = img.resize((640, 640))
-        img.save(os.path.join('temp', file.filename))
+        img.save(os.path.join('temp', img_file.filename))
 
-        # run through model
+        # run through models and receive list
+        run(weights='models/kd_mod_med.pt', source=os.path.join('temp', img_file.filename),
+            project='receive', name='', exist_ok=True)
+        txt_filename = img_file.filename.split('.')[0] + '.txt'
+        with open(os.path.join('receive', txt_filename)) as txt_file:
+            labels = txt_file.read()
 
-        return jsonify({'file': file.filename, 'msg': 'success', 'size': [img.width, img.height]})
+        # remove img from temp
+        os.remove(os.path.join('temp', img_file.filename))
+
+        return jsonify({'file': txt_filename, 'result': 'success', 'labels': labels.replace('\n', ',')[:len(labels)-1]})
 
 
-api.add_resource(Hello, '/')
 api.add_resource(File, '/file')
 
 if __name__ == '__main__':
