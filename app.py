@@ -28,7 +28,7 @@ class File(Resource):
         # remove img from temp
         os.remove(os.path.join('temp', img_file.filename))
 
-        return jsonify({'file': txt_filename, 'result': 'success', 'labels': labels.replace('\n', ',')[:len(labels)-1]})
+        return jsonify({'result': 'success', 'labels': labels.replace('\n', ',')[:len(labels)-1]})
 
 
 api.add_resource(File, '/file')
