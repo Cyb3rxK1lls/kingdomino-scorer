@@ -5,7 +5,7 @@ from Tile import Tile
 
 # send image file
 filename = input("enter image filepath: ")
-response = requests.post("http://127.0.0.1:5000/file", files={'image': open(filename, 'rb')})
+response = requests.post("http://127.0.0.1:5000/file", files={'picture': open(filename, 'rb')})
 
 # get list of detections
 dictionary = json.loads(response.text)

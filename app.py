@@ -10,8 +10,14 @@ api = Api(app)
 
 class File(Resource):
 
+    def get(self):
+        response = jsonify({'status': 200})
+        
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
+
     def post(self):
-        img_file = request.files['image']
+        img_file = request.files['picture']
 
         # Read the image via file.stream
         img = Image.open(img_file.stream)
@@ -28,7 +34,7 @@ class File(Resource):
         # remove img from temp
         os.remove(os.path.join('temp', img_file.filename))
 
-        return jsonify({'result': 'success', 'labels': labels.replace('\n', ',')[:len(labels)-1]})
+        return jsonify({'result': 200, 'labels': labels.replace('\n', ',')[:len(labels)-1]})
 
 
 api.add_resource(File, '/file')
