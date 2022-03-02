@@ -5,3 +5,4 @@ receive/*
 temp/*
 send/*
 *.pyc
+kingdomino_score_calculator/build/*
