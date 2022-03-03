@@ -1,0 +1,16 @@
+plains_0
+graveyard_2
+cave_2
+graveyard_0
+wheat_0
+water_0
+plains_1
+water_1
+wheat_1
+plains_2
+forest_1
+forest_0
+cave_0
+cave_3
+cave_1
+graveyard_1
