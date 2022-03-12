@@ -83,6 +83,8 @@ def run(weights=ROOT / 'models/kd_mod_med.pt',  # models.pt path(s)
             txt_path = str(save_dir / p.stem)  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+            with open(txt_path + '.txt', 'w') as f:
+                f.write("")
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
