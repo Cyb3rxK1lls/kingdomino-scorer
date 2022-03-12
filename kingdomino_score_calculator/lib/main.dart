@@ -9,6 +9,7 @@ import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
 enum Status { success, loadFailure, noDetections }
+enum Loading { loading, loaded, neither }
 
 void main() {
   runApp(const MyApp());
@@ -40,9 +41,8 @@ class _MyHomePageState extends State<MyHomePage> {
       "http://10.0.2.2:5000/file"; //10.0.2.2 while using emulator
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
-  bool _loaded = false;
-  bool _loading = false;
-  Status status = Status.noDetections;
+  Loading _load = Loading.neither;
+  Status _status = Status.noDetections;
   String mainText = "";
   List<String> classes = [];
   List<Tile> tiles = [];
@@ -50,35 +50,34 @@ class _MyHomePageState extends State<MyHomePage> {
   List<Widget> wtiles = [];
 
   _MyHomePageState() {
+    _load = Loading.neither;
+    _status = Status.noDetections;
     _loadClasses();
     _refreshMainText();
-    // board = Board([Tile('empty', .5, .5, .5, .5, 2, 2)]);
   }
 
   /// adjusts the main text and size accordingly
   void _refreshMainText() {
-    switch (status) {
-      case Status.success:
-        if (_loading) {
-          mainText = "loading...";
-        } else {
+    if (_load == Loading.loading) {
+      mainText = "loading...";
+    } else {
+      switch (_status) {
+        case Status.success:
           mainText = "Score: " + board.totalScore.toString();
-        }
-        break;
+          break;
 
-      case Status.loadFailure:
-        mainText = "failed to load image... retry.";
-        break;
+        case Status.loadFailure:
+          mainText = "failed to load image... retry.";
+          break;
 
-      case Status.noDetections:
-        if (_loading) {
-          mainText = "loading...";
-        } else if (_loaded) {
-          mainText = "Found no tiles.";
-        } else {
-          mainText = "Select image from gallery";
-        }
-        break;
+        case Status.noDetections:
+          if (_load == Loading.loaded) {
+            mainText = "Found no tiles.";
+          } else {
+            mainText = "Select or take picture";
+          }
+          break;
+      }
     }
   }
 
@@ -94,6 +93,7 @@ class _MyHomePageState extends State<MyHomePage> {
     String str = await result.stream.bytesToString();
     int resultStatus = int.parse(str.substring(str.length - 6, str.length - 3));
     if (resultStatus == 200) {
+      // 200 ==> success, so process all new tiles
       String detectionsText = str.substring(15, str.length - 22);
       List<String> detections = detectionsText.split(',');
       for (String detection in detections) {
@@ -109,11 +109,10 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     setState(() {
-      _loading = false;
-      _loaded = true;
+      _load = Loading.loaded;
       switch (resultStatus) {
         case 200:
-          status = Status.success;
+          _status = Status.success;
           board = Board(tiles);
           wtiles = [];
           for (Tile tile in board.board) {
@@ -122,11 +121,11 @@ class _MyHomePageState extends State<MyHomePage> {
           break;
 
         case 300:
-          status = Status.noDetections;
+          _status = Status.noDetections;
           break;
 
         default:
-          status = Status.loadFailure;
+          _status = Status.loadFailure;
       }
       _refreshMainText();
     });
@@ -141,11 +140,11 @@ class _MyHomePageState extends State<MyHomePage> {
   void chooseImage(ImageSource imgSource) async {
     var image = await _picker.pickImage(source: imgSource);
     if (image == null) {
+      // null ==> user canceled their action
       return;
     }
     setState(() {
-      _loaded = false;
-      _loading = true;
+      _load = Loading.loading;
       _refreshMainText();
     });
     postRequest(XFile(image.path));
@@ -162,8 +161,7 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Clear a board
   void clearBoard() {
     setState(() {
-      _loading = false;
-      _loaded = false;
+      _load = Loading.neither;
       _refreshMainText();
       wtiles = [];
     });
@@ -181,16 +179,14 @@ class _MyHomePageState extends State<MyHomePage> {
       textAlign: TextAlign.center,
       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
     ));
-    if (status == Status.success) {
+    if (_status == Status.success) {
+      // success ==> display board
       widgets.insert(
           0,
           Expanded(
               child: GridView(
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: imageSize,
-                crossAxisSpacing: 0,
-                mainAxisSpacing: 0,
-                mainAxisExtent: imageSize),
+                maxCrossAxisExtent: imageSize, mainAxisExtent: imageSize),
             children: wtiles,
             shrinkWrap: true,
           )));
