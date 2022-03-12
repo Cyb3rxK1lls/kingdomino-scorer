@@ -121,14 +121,22 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   /// Choose an image from storage
-  void chooseImage() async {
+  void chooseImage(ImageSource imgSource) async {
     setState(() {
       _loaded = false;
       _loading = true;
       _refreshMainText();
     });
-    var image = await _picker.pickImage(source: ImageSource.gallery);
+    var image = await _picker.pickImage(source: imgSource);
     postRequest(XFile(image!.path));
+  }
+
+  void galleryPicture() async {
+    chooseImage(ImageSource.gallery);
+  }
+
+  void cameraPicture() async {
+    chooseImage(ImageSource.camera);
   }
 
   /// Clear a board
@@ -143,10 +151,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+    double imageSize =
+        min(screenWidth / board.numCols, screenHeight / board.numRows);
     return Scaffold(
         appBar: AppBar(
           title: const Text(
-            'Kingdomino Score Calculator - Beta',
+            'Kingdomino Scorer - Beta',
           ),
         ),
         body: Center(
@@ -160,9 +172,13 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               Expanded(
                 child: GridView(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 120, mainAxisExtent: 120),
+                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: imageSize,
+                      crossAxisSpacing: 0,
+                      mainAxisSpacing: 0,
+                      mainAxisExtent: imageSize),
                   children: wtiles,
+                  shrinkWrap: true,
                 ),
               ),
             ],
@@ -173,15 +189,21 @@ class _MyHomePageState extends State<MyHomePage> {
           children: [
             IconButton(
               icon: const Icon(Icons.image_search),
-              onPressed: chooseImage,
-              tooltip: 'Choose Image',
-              color: Colors.red,
+              onPressed: galleryPicture,
+              tooltip: 'Choose image from gallery',
+              color: Colors.green,
             ),
             IconButton(
                 icon: const Icon(Icons.remove_circle_outline_outlined),
                 onPressed: clearBoard,
                 tooltip: 'Clear Board',
-                color: Colors.blue)
+                color: Colors.red),
+            IconButton(
+              icon: const Icon(Icons.camera_alt),
+              onPressed: cameraPicture,
+              tooltip: "Choose image from camera",
+              color: Colors.green,
+            )
           ],
         ));
   }
