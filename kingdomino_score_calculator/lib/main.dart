@@ -8,6 +8,8 @@ import 'package:kingdomino_score_calculator/board.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
+enum Status { success, loadFailure, noDetections }
+
 void main() {
   runApp(const MyApp());
 }
@@ -40,9 +42,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final int imageSize = 640;
   bool _loaded = false;
   bool _loading = false;
-  bool _failure = false;
+  Status status = Status.noDetections;
   String mainText = "";
-  double mainTextSize = 0;
   List<String> classes = [];
   List<Tile> tiles = [];
   Board board = Board([]);
@@ -51,25 +52,33 @@ class _MyHomePageState extends State<MyHomePage> {
   _MyHomePageState() {
     _loadClasses();
     _refreshMainText();
-    board = Board([Tile('empty', .5, .5, .5, .5, 2, 2)]);
+    // board = Board([Tile('empty', .5, .5, .5, .5, 2, 2)]);
   }
 
   /// adjusts the main text and size accordingly
   void _refreshMainText() {
-    if (!_failure) {
-      if (_loading) {
-        mainText = "loading...";
-        mainTextSize = 42;
-      } else if (_loaded) {
-        mainText = "Score: " + board.totalScore.toString();
-        mainTextSize = 42;
-      } else if (!_loaded) {
-        mainText = "Select image from gallery";
-        mainTextSize = 24;
-      }
-    } else {
-      mainText = "failed to load image... retry.";
-      mainTextSize = 24;
+    switch (status) {
+      case Status.success:
+        if (_loading) {
+          mainText = "loading...";
+        } else {
+          mainText = "Score: " + board.totalScore.toString();
+        }
+        break;
+
+      case Status.loadFailure:
+        mainText = "failed to load image... retry.";
+        break;
+
+      case Status.noDetections:
+        if (_loading) {
+          mainText = "loading...";
+        } else if (_loaded) {
+          mainText = "Found no tiles.";
+        } else {
+          mainText = "Select image from gallery";
+        }
+        break;
     }
   }
 
@@ -83,33 +92,41 @@ class _MyHomePageState extends State<MyHomePage> {
 
     var result = await request.send();
     String str = await result.stream.bytesToString();
-    int status = int.parse(str.substring(str.length - 6, str.length - 3));
-    String detectionsText = str.substring(15, str.length - 22);
-    List<String> detections = detectionsText.split(',');
-    for (String detection in detections) {
-      List<String> components = detection.split(' ');
-      String label =
-          classes.elementAt(int.parse(components.elementAt(0))).trim();
-      double xMid = double.parse(components.elementAt(1));
-      double yMid = double.parse(components.elementAt(2));
-      double width = double.parse(components.elementAt(3));
-      double height = double.parse(components.elementAt(4));
-      tiles.add(Tile(label, xMid, yMid, width, height, imageSize, imageSize));
+    int resultStatus = int.parse(str.substring(str.length - 6, str.length - 3));
+    if (resultStatus == 200) {
+      String detectionsText = str.substring(15, str.length - 22);
+      List<String> detections = detectionsText.split(',');
+      for (String detection in detections) {
+        List<String> components = detection.split(' ');
+        String label =
+            classes.elementAt(int.parse(components.elementAt(0))).trim();
+        double xMid = double.parse(components.elementAt(1));
+        double yMid = double.parse(components.elementAt(2));
+        double width = double.parse(components.elementAt(3));
+        double height = double.parse(components.elementAt(4));
+        tiles.add(Tile(label, xMid, yMid, width, height, imageSize, imageSize));
+      }
     }
 
     setState(() {
       _loading = false;
       _loaded = true;
-      if (status == 200) {
-        _failure = false;
-      } else {
-        _failure = true;
-      }
+      switch (resultStatus) {
+        case 200:
+          status = Status.success;
+          board = Board(tiles);
+          wtiles = [];
+          for (Tile tile in board.board) {
+            wtiles.add(TileWidget(tile: tile));
+          }
+          break;
 
-      board = Board(tiles);
-      wtiles = [];
-      for (Tile tile in board.board) {
-        wtiles.add(TileWidget(tile: tile));
+        case 300:
+          status = Status.noDetections;
+          break;
+
+        default:
+          status = Status.loadFailure;
       }
       _refreshMainText();
     });
@@ -122,13 +139,16 @@ class _MyHomePageState extends State<MyHomePage> {
 
   /// Choose an image from storage
   void chooseImage(ImageSource imgSource) async {
+    var image = await _picker.pickImage(source: imgSource);
+    if (image == null) {
+      return;
+    }
     setState(() {
       _loaded = false;
       _loading = true;
       _refreshMainText();
     });
-    var image = await _picker.pickImage(source: imgSource);
-    postRequest(XFile(image!.path));
+    postRequest(XFile(image.path));
   }
 
   void galleryPicture() async {
@@ -155,6 +175,27 @@ class _MyHomePageState extends State<MyHomePage> {
     double screenHeight = MediaQuery.of(context).size.height;
     double imageSize =
         min(screenWidth / board.numCols, screenHeight / board.numRows);
+    List<Widget> widgets = [];
+    widgets.add(Text(
+      mainText,
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
+    ));
+    if (status == Status.success) {
+      widgets.insert(
+          0,
+          Expanded(
+              child: GridView(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: imageSize,
+                crossAxisSpacing: 0,
+                mainAxisSpacing: 0,
+                mainAxisExtent: imageSize),
+            children: wtiles,
+            shrinkWrap: true,
+          )));
+    }
+
     return Scaffold(
         appBar: AppBar(
           title: const Text(
@@ -164,24 +205,7 @@ class _MyHomePageState extends State<MyHomePage> {
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                mainText,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: mainTextSize),
-              ),
-              Expanded(
-                child: GridView(
-                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: imageSize,
-                      crossAxisSpacing: 0,
-                      mainAxisSpacing: 0,
-                      mainAxisExtent: imageSize),
-                  children: wtiles,
-                  shrinkWrap: true,
-                ),
-              ),
-            ],
+            children: widgets,
           ),
         ),
         bottomNavigationBar: ButtonBar(
