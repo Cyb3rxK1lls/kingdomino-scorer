@@ -37,8 +37,9 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final String _url =
-      "http://10.0.2.2:5000/file"; //10.0.2.2 while using emulator
+  //10.0.2.2 while using emulator, 10.129.16.113 if using device
+  final String _url = "http://10.0.2.2:5000/file";
+  // "http://10.129.16.113:8000/file";
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
   Loading _load = Loading.neither;
@@ -186,7 +187,11 @@ class _MyHomePageState extends State<MyHomePage> {
           Expanded(
               child: GridView(
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: imageSize, mainAxisExtent: imageSize),
+              maxCrossAxisExtent: imageSize,
+              mainAxisExtent: imageSize,
+              crossAxisSpacing: 1.0,
+              mainAxisSpacing: 1.0,
+            ),
             children: wtiles,
             shrinkWrap: true,
           )));
