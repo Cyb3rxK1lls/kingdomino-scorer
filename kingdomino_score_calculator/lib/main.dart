@@ -8,6 +8,9 @@ import 'package:kingdomino_score_calculator/board.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
+enum Status { success, loadFailure, noDetections }
+enum Loading { loading, loaded, neither }
+
 void main() {
   runApp(const MyApp());
 }
@@ -34,42 +37,48 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final String _url =
-      "http://10.0.2.2:5000/file"; //10.0.2.2 while using emulator
+  //10.0.2.2 while using emulator, 10.129.16.113 if using device
+  final String _url = "http://10.0.2.2:5000/file";
+  // "http://10.129.16.113:8000/file";
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
-  bool _loaded = false;
-  bool _loading = false;
-  bool _failure = false;
+  Loading _load = Loading.neither;
+  Status _status = Status.noDetections;
   String mainText = "";
-  double mainTextSize = 0;
   List<String> classes = [];
   List<Tile> tiles = [];
   Board board = Board([]);
   List<Widget> wtiles = [];
 
   _MyHomePageState() {
+    _load = Loading.neither;
+    _status = Status.noDetections;
     _loadClasses();
     _refreshMainText();
-    board = Board([Tile('empty', .5, .5, .5, .5, 2, 2)]);
   }
 
   /// adjusts the main text and size accordingly
   void _refreshMainText() {
-    if (!_failure) {
-      if (_loading) {
-        mainText = "loading...";
-        mainTextSize = 42;
-      } else if (_loaded) {
-        mainText = "Score: " + board.totalScore.toString();
-        mainTextSize = 42;
-      } else if (!_loaded) {
-        mainText = "Select image from gallery";
-        mainTextSize = 24;
-      }
+    if (_load == Loading.loading) {
+      mainText = "loading...";
     } else {
-      mainText = "failed to load image... retry.";
-      mainTextSize = 24;
+      switch (_status) {
+        case Status.success:
+          mainText = "Score: " + board.totalScore.toString();
+          break;
+
+        case Status.loadFailure:
+          mainText = "failed to load image... retry.";
+          break;
+
+        case Status.noDetections:
+          if (_load == Loading.loaded) {
+            mainText = "Found no tiles.";
+          } else {
+            mainText = "Select or take picture";
+          }
+          break;
+      }
     }
   }
 
@@ -83,33 +92,41 @@ class _MyHomePageState extends State<MyHomePage> {
 
     var result = await request.send();
     String str = await result.stream.bytesToString();
-    int status = int.parse(str.substring(str.length - 6, str.length - 3));
-    String detectionsText = str.substring(15, str.length - 22);
-    List<String> detections = detectionsText.split(',');
-    for (String detection in detections) {
-      List<String> components = detection.split(' ');
-      String label =
-          classes.elementAt(int.parse(components.elementAt(0))).trim();
-      double xMid = double.parse(components.elementAt(1));
-      double yMid = double.parse(components.elementAt(2));
-      double width = double.parse(components.elementAt(3));
-      double height = double.parse(components.elementAt(4));
-      tiles.add(Tile(label, xMid, yMid, width, height, imageSize, imageSize));
+    int resultStatus = int.parse(str.substring(str.length - 6, str.length - 3));
+    if (resultStatus == 200) {
+      // 200 ==> success, so process all new tiles
+      String detectionsText = str.substring(15, str.length - 22);
+      List<String> detections = detectionsText.split(',');
+      for (String detection in detections) {
+        List<String> components = detection.split(' ');
+        String label =
+            classes.elementAt(int.parse(components.elementAt(0))).trim();
+        double xMid = double.parse(components.elementAt(1));
+        double yMid = double.parse(components.elementAt(2));
+        double width = double.parse(components.elementAt(3));
+        double height = double.parse(components.elementAt(4));
+        tiles.add(Tile(label, xMid, yMid, width, height, imageSize, imageSize));
+      }
     }
 
     setState(() {
-      _loading = false;
-      _loaded = true;
-      if (status == 200) {
-        _failure = false;
-      } else {
-        _failure = true;
-      }
+      _load = Loading.loaded;
+      switch (resultStatus) {
+        case 200:
+          _status = Status.success;
+          board = Board(tiles);
+          wtiles = [];
+          for (Tile tile in board.board) {
+            wtiles.add(TileWidget(tile: tile));
+          }
+          break;
 
-      board = Board(tiles);
-      wtiles = [];
-      for (Tile tile in board.board) {
-        wtiles.add(TileWidget(tile: tile));
+        case 300:
+          _status = Status.noDetections;
+          break;
+
+        default:
+          _status = Status.loadFailure;
       }
       _refreshMainText();
     });
@@ -121,21 +138,31 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   /// Choose an image from storage
-  void chooseImage() async {
+  void chooseImage(ImageSource imgSource) async {
+    var image = await _picker.pickImage(source: imgSource);
+    if (image == null) {
+      // null ==> user canceled their action
+      return;
+    }
     setState(() {
-      _loaded = false;
-      _loading = true;
+      _load = Loading.loading;
       _refreshMainText();
     });
-    var image = await _picker.pickImage(source: ImageSource.gallery);
-    postRequest(XFile(image!.path));
+    postRequest(XFile(image.path));
+  }
+
+  void galleryPicture() async {
+    chooseImage(ImageSource.gallery);
+  }
+
+  void cameraPicture() async {
+    chooseImage(ImageSource.camera);
   }
 
   /// Clear a board
   void clearBoard() {
     setState(() {
-      _loading = false;
-      _loaded = false;
+      _load = Loading.neither;
       _refreshMainText();
       wtiles = [];
     });
@@ -143,29 +170,43 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+    double imageSize =
+        min(screenWidth / board.numCols, screenHeight / board.numRows);
+    List<Widget> widgets = [];
+    widgets.add(Text(
+      mainText,
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
+    ));
+    if (_status == Status.success) {
+      // success ==> display board
+      widgets.insert(
+          0,
+          Expanded(
+              child: GridView(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: imageSize,
+              mainAxisExtent: imageSize,
+              crossAxisSpacing: 1.0,
+              mainAxisSpacing: 1.0,
+            ),
+            children: wtiles,
+            shrinkWrap: true,
+          )));
+    }
+
     return Scaffold(
         appBar: AppBar(
           title: const Text(
-            'Kingdomino Score Calculator - Beta',
+            'Kingdomino Scorer - Beta',
           ),
         ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                mainText,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: mainTextSize),
-              ),
-              Expanded(
-                child: GridView(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 120, mainAxisExtent: 120),
-                  children: wtiles,
-                ),
-              ),
-            ],
+            children: widgets,
           ),
         ),
         bottomNavigationBar: ButtonBar(
@@ -173,15 +214,21 @@ class _MyHomePageState extends State<MyHomePage> {
           children: [
             IconButton(
               icon: const Icon(Icons.image_search),
-              onPressed: chooseImage,
-              tooltip: 'Choose Image',
-              color: Colors.red,
+              onPressed: galleryPicture,
+              tooltip: 'Choose image from gallery',
+              color: Colors.green,
             ),
             IconButton(
                 icon: const Icon(Icons.remove_circle_outline_outlined),
                 onPressed: clearBoard,
                 tooltip: 'Clear Board',
-                color: Colors.blue)
+                color: Colors.red),
+            IconButton(
+              icon: const Icon(Icons.camera_alt),
+              onPressed: cameraPicture,
+              tooltip: "Choose image from camera",
+              color: Colors.green,
+            )
           ],
         ));
   }

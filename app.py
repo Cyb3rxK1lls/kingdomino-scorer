@@ -17,6 +17,7 @@ class File(Resource):
         return response
 
     def post(self):
+        print("recieved request")
         img_file = request.files['picture']
 
         # Read the image via file.stream
@@ -34,10 +35,13 @@ class File(Resource):
         # remove img from temp
         os.remove(os.path.join('temp', img_file.filename))
 
-        return jsonify({'result': 200, 'labels': labels.replace('\n', ',')[:len(labels)-1]})
+        status = 300 if len(labels) == 0 else 200
+        if status == 300:
+            os.remove(os.path.join('receieve', img_file.filename[:len(img_file.filename)-3] + 'txt'))
+        return jsonify({'result': status, 'labels': labels.replace('\n', ',')[:len(labels)-1]})
 
 
 api.add_resource(File, '/file')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=8000)
