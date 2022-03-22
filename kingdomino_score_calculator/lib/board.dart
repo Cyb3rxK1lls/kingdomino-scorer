@@ -71,6 +71,14 @@ class Board {
     _calculateScore();
   }
 
+  void recalculateScore() {
+    totalScore = 0;
+    for (Tile t in board) {
+      t.reset();
+    }
+    _calculateScore();
+  }
+
   List<Tile> _sort(List<Tile> tiles) {
     for (int i = 0; i < tiles.length; i++) {
       for (int j = i + 1; j < tiles.length; j++) {
@@ -87,7 +95,7 @@ class Board {
   /// Gets a single tile based on its coordinates on the board.
   Tile _getTile(double xMid, double yMid) {
     Tile temp = Tile("none", xMid.toDouble(), yMid.toDouble(),
-        averageWidth.toDouble(), averageHeight.toDouble(), 0, 0);
+        averageWidth.toDouble(), averageHeight.toDouble(), 0, 0, true);
     for (Tile tile in board) {
       if (tile.inTile(temp)) {
         return tile;
@@ -137,7 +145,7 @@ class Board {
         double nextY = minY + (averageHeight * y);
         if (!_containsTile(nextX, nextY)) {
           Tile newTile = Tile("empty", nextX.toDouble(), nextY.toDouble(),
-              averageWidth.toDouble(), averageHeight.toDouble(), 0, 0);
+              averageWidth.toDouble(), averageHeight.toDouble(), 0, 0, true);
           board.insert(y * numCols + x, newTile);
         }
       }

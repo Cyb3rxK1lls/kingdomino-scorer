@@ -10,6 +10,7 @@ import 'package:kingdomino_score_calculator/tile_widget.dart';
 
 enum Status { success, loadFailure, noDetections }
 enum Loading { loading, loaded, neither }
+enum Mode { view, edit }
 
 void main() {
   runApp(const MyApp());
@@ -44,11 +45,13 @@ class _MyHomePageState extends State<MyHomePage> {
   final int imageSize = 640;
   Loading _load = Loading.neither;
   Status _status = Status.noDetections;
+  Mode _mode = Mode.view;
   String mainText = "";
   List<String> classes = [];
   List<Tile> tiles = [];
   Board board = Board([]);
-  List<Widget> wtiles = [];
+  List<Widget> tileWidgets = [];
+  List<Widget> dragTiles = [];
 
   _MyHomePageState() {
     _load = Loading.neither;
@@ -105,7 +108,8 @@ class _MyHomePageState extends State<MyHomePage> {
         double yMid = double.parse(components.elementAt(2));
         double width = double.parse(components.elementAt(3));
         double height = double.parse(components.elementAt(4));
-        tiles.add(Tile(label, xMid, yMid, width, height, imageSize, imageSize));
+        tiles.add(Tile(
+            label, xMid, yMid, width, height, imageSize, imageSize, false));
       }
     }
 
@@ -115,9 +119,9 @@ class _MyHomePageState extends State<MyHomePage> {
         case 200:
           _status = Status.success;
           board = Board(tiles);
-          wtiles = [];
+          tileWidgets = [];
           for (Tile tile in board.board) {
-            wtiles.add(TileWidget(tile: tile));
+            tileWidgets.add(TileWidget(tile: tile));
           }
           break;
 
@@ -146,6 +150,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     setState(() {
       _load = Loading.loading;
+      _mode = Mode.view;
       _refreshMainText();
     });
     postRequest(XFile(image.path));
@@ -163,9 +168,87 @@ class _MyHomePageState extends State<MyHomePage> {
   void clearBoard() {
     setState(() {
       _load = Loading.neither;
+      _status = Status.noDetections;
+      _mode = Mode.view;
+      tileWidgets = [];
       _refreshMainText();
-      wtiles = [];
     });
+  }
+
+  void _updateTiles() {
+    setState(() {
+      board.recalculateScore();
+      _refreshMainText();
+    });
+  }
+
+  void _changeMode() {
+    setState(() {
+      if (_mode == Mode.view) {
+        _mode = Mode.edit;
+      } else {
+        _mode = Mode.view;
+      }
+    });
+  }
+
+  List<Widget> _createDraggableTiles(double size) {
+    List<String> labels = [
+      'cave_0',
+      'cave_1',
+      'cave_2',
+      'cave_3',
+      'forest_0',
+      'forest_1',
+      'water_0',
+      'water_1',
+      'wheat_0',
+      'wheat_1',
+      'graveyard_0',
+      'graveyard_1',
+      'graveyard_2',
+      'plains_0',
+      'plains_1',
+      'plains_2'
+    ];
+    List<Widget> widgets = [];
+    for (String label in labels) {
+      label.replaceAll('\n', '');
+      if (label == '') {
+        continue;
+      }
+
+      Draggable<String> drag = Draggable<String>(
+        // Data is the value this Draggable stores.
+        data: label,
+        child: SizedBox(
+          height: size,
+          width: size,
+          child: Center(
+            child: Image.asset('assets/images/' + label + '.png'),
+          ),
+        ),
+        feedback: SizedBox(
+          height: size,
+          width: size,
+          child: Center(
+            child: Image.asset('assets/images/' + label + '.png'),
+          ),
+        ),
+        childWhenDragging: SizedBox(
+          height: size,
+          width: size,
+          child: Center(
+            child: Image.asset('assets/images/empty.png'),
+          ),
+        ),
+        onDragCompleted: () {
+          _updateTiles();
+        },
+      );
+      widgets.add(drag);
+    }
+    return widgets;
   }
 
   @override
@@ -174,27 +257,50 @@ class _MyHomePageState extends State<MyHomePage> {
     double screenHeight = MediaQuery.of(context).size.height;
     double imageSize =
         min(screenWidth / board.numCols, screenHeight / board.numRows);
+    double dragSize = min(screenWidth, screenHeight) / 8.0;
+    if (dragTiles.isEmpty && tiles.isNotEmpty) {
+      dragTiles = _createDraggableTiles(dragSize);
+    }
     List<Widget> widgets = [];
-    widgets.add(Text(
-      mainText,
-      textAlign: TextAlign.center,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
-    ));
     if (_status == Status.success) {
       // success ==> display board
-      widgets.insert(
-          0,
-          Expanded(
-              child: GridView(
+      widgets.add(Expanded(
+        child: GridView(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: imageSize,
+            mainAxisExtent: imageSize,
+            crossAxisSpacing: 1.0,
+            mainAxisSpacing: 1.0,
+          ),
+          children: tileWidgets,
+          shrinkWrap: true,
+        ),
+        flex: 7,
+      ));
+    }
+    if (_mode == Mode.view) {
+      int _flex = _status != Status.success ? 0 : 1;
+      widgets.add(Expanded(
+        child: Text(
+          mainText,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
+        ),
+        flex: _flex,
+      ));
+    } else if (_mode == Mode.edit) {
+      widgets.add(Expanded(
+          child: GridView(
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: imageSize,
-              mainAxisExtent: imageSize,
+              maxCrossAxisExtent: dragSize,
+              mainAxisExtent: dragSize,
               crossAxisSpacing: 1.0,
               mainAxisSpacing: 1.0,
             ),
-            children: wtiles,
+            children: dragTiles,
             shrinkWrap: true,
-          )));
+          ),
+          flex: 0));
     }
 
     return Scaffold(
@@ -219,16 +325,21 @@ class _MyHomePageState extends State<MyHomePage> {
               color: Colors.green,
             ),
             IconButton(
-                icon: const Icon(Icons.remove_circle_outline_outlined),
-                onPressed: clearBoard,
-                tooltip: 'Clear Board',
-                color: Colors.red),
-            IconButton(
               icon: const Icon(Icons.camera_alt),
               onPressed: cameraPicture,
               tooltip: "Choose image from camera",
               color: Colors.green,
-            )
+            ),
+            IconButton(
+                icon: Icon(_mode == Mode.view ? Icons.edit : Icons.save_alt),
+                onPressed: _changeMode,
+                tooltip: _mode == Mode.view ? "view board" : "edit board",
+                color: Colors.blue),
+            IconButton(
+                icon: const Icon(Icons.remove_circle_outline_outlined),
+                onPressed: clearBoard,
+                tooltip: 'Clear Board',
+                color: Colors.red),
           ],
         ));
   }
