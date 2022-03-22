@@ -17,7 +17,6 @@ class File(Resource):
         return response
 
     def post(self):
-        print("recieved request")
         img_file = request.files['picture']
 
         # Read the image via file.stream
@@ -44,4 +43,5 @@ class File(Resource):
 api.add_resource(File, '/file')
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=8000)
+    # app.run(debug=True, host="0.0.0.0", port=8000)
+    app.run(debug=True)
