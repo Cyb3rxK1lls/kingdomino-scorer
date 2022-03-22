@@ -13,8 +13,8 @@ class Tile {
   bool explored = false;
 
   Tile(this.label, double xCenter, double yCenter, double tileWidth,
-      double tileHeight, int imageWidth, int imageHeight) {
-    if (label == "empty" || label == "none") {
+      double tileHeight, int imageWidth, int imageHeight, bool preProcessed) {
+    if (preProcessed) {
       xMid = xCenter;
       yMid = yCenter;
     } else {
@@ -86,4 +86,10 @@ class Tile {
 
   /// The height of the tile.
   int get height => yMax - yMin;
+
+  void reset() {
+    crowns = int.parse(label.characters.elementAt(label.length - 1));
+    score = 0;
+    explored = false;
+  }
 }
