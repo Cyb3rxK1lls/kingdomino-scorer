@@ -1,16 +1,19 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kingdomino_score_calculator/board.dart';
+import 'package:kingdomino_score_calculator/history.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
 enum Status { success, loadFailure, noDetections }
 enum Loading { loading, loaded, neither }
-enum Mode { view, edit }
+enum Mode { view, edit, history, regular }
 
 void main() {
   runApp(const MyApp());
@@ -43,11 +46,15 @@ class _MyHomePageState extends State<MyHomePage> {
   // "http://10.129.16.113:8000/file";
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
+  int _selectedHistoryItem = 0;
+  bool recentlySaved = false;
+  bool pastGame = false;
   Loading _load = Loading.neither;
   Status _status = Status.noDetections;
   Mode _mode = Mode.view;
   String mainText = "";
   List<String> classes = [];
+  List<History> history = [];
   List<Tile> tiles = [];
   Board board = Board([]);
   List<Widget> tileWidgets = [];
@@ -57,6 +64,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _load = Loading.neither;
     _status = Status.noDetections;
     _loadClasses();
+    _loadHistory();
     _refreshMainText();
   }
 
@@ -78,7 +86,12 @@ class _MyHomePageState extends State<MyHomePage> {
           if (_load == Loading.loaded) {
             mainText = "Found no tiles.";
           } else {
-            mainText = "Select or take picture";
+            if (recentlySaved) {
+              mainText = "Saved! Select or take picture again";
+              recentlySaved = false;
+            } else {
+              mainText = "Select or take picture";
+            }
           }
           break;
       }
@@ -108,8 +121,7 @@ class _MyHomePageState extends State<MyHomePage> {
         double yMid = double.parse(components.elementAt(2));
         double width = double.parse(components.elementAt(3));
         double height = double.parse(components.elementAt(4));
-        tiles.add(Tile(
-            label, xMid, yMid, width, height, imageSize, imageSize, false));
+        tiles.add(Tile(label, xMid, yMid, width, height, imageSize, false));
       }
     }
 
@@ -139,6 +151,103 @@ class _MyHomePageState extends State<MyHomePage> {
   void _loadClasses() async {
     String classesText = await rootBundle.loadString('assets/classes.txt');
     classes = classesText.split('\n');
+  }
+
+  Future<String> _getPath(String folder) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final Directory desiredFolder = Directory('${directory.path}/$folder/');
+    if (!await desiredFolder.exists()) {
+      desiredFolder.create();
+    }
+    return desiredFolder.path;
+  }
+
+  Future<File> _getFile(String folder, String filename) async {
+    final path = await _getPath(folder);
+    final File desiredFile = File('$path/$filename');
+    if (!await desiredFile.exists()) {
+      return desiredFile.create();
+    }
+    return desiredFile;
+  }
+
+  void _loadHistory() async {
+    File gamelist = await _getFile('', 'historyList.txt');
+    List<String> games = await gamelist.readAsLines();
+    for (String s in games) {
+      String name = s.split(' ')[0];
+      int score = int.parse(s.split(' ')[1]);
+      history.add(History(name, score));
+    }
+  }
+
+  void _writeGame(String filename) async {
+    List<String> boardState = board.packageBoard();
+    File historyFile = await _getFile('history', '$filename.txt');
+    String contents = "";
+    for (String tile in boardState) {
+      contents += tile + '\n';
+    }
+    historyFile.writeAsString(contents);
+  }
+
+  void _writeStats(String filename) async {
+    File statsFile = await _getFile('', 'aggregateStats.txt');
+    // TODO
+  }
+
+  void loadGame(String filename) async {
+    List<Tile> tiles = [];
+    File gameFile = await _getFile('history', '$filename.txt');
+    String content = await gameFile.readAsString();
+    List<String> packedTiles = content.split('\n');
+    for (String tile in packedTiles) {
+      if (tile.isEmpty) {
+        continue;
+      }
+      List<String> components = tile.split(' ');
+      String label = components.elementAt(0);
+      double xMid = double.parse(components.elementAt(1));
+      double yMid = double.parse(components.elementAt(2));
+      double width = double.parse(components.elementAt(3));
+      double height = double.parse(components.elementAt(4));
+      tiles.add(Tile(label, xMid, yMid, width, height, imageSize, false));
+    }
+
+    setState(() {
+      _load = Loading.loaded;
+      _status = Status.success;
+      _mode = Mode.view;
+      board = Board(tiles);
+      pastGame = true;
+      tileWidgets = [];
+      for (Tile tile in board.board) {
+        tileWidgets.add(TileWidget(tile: tile));
+      }
+      _refreshMainText();
+    });
+  }
+
+  void saveGame() async {
+    DateTime time = DateTime.now();
+    String filename = '${time.year.toString()}_${time.month.toString()}_';
+    filename += '${time.day.toString()}_${time.hour.toString()}_';
+    filename += '${time.minute.toString()}_${time.second.toString()}';
+    _writeStats(filename);
+    _writeGame(filename);
+    History newHistory = History(filename, board.totalScore);
+    File gameFile = await _getFile('', 'historyList.txt');
+    final contents = await gameFile.readAsString();
+    String newContents = contents + newHistory.toString() + '\n';
+    gameFile.writeAsString(newContents);
+    history.add(newHistory);
+    setState(() {
+      _load = Loading.neither;
+      _status = Status.noDetections;
+      board = Board([]);
+      recentlySaved = true;
+      _refreshMainText();
+    });
   }
 
   /// Choose an image from storage
@@ -182,14 +291,22 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _changeMode() {
+  void _changeMode({Mode newMode = Mode.regular}) {
     setState(() {
-      if (_mode == Mode.view) {
-        _mode = Mode.edit;
-      } else {
-        _mode = Mode.view;
+      if (newMode == Mode.regular) {
+        if (_mode == Mode.view) {
+          _mode = Mode.edit;
+        } else {
+          _mode = Mode.view;
+        }
+      } else if (newMode == Mode.history) {
+        _mode = Mode.history;
       }
     });
+  }
+
+  void _historyLoadMode() {
+    _changeMode(newMode: Mode.history);
   }
 
   List<Widget> _createDraggableTiles(double size) {
@@ -261,46 +378,122 @@ class _MyHomePageState extends State<MyHomePage> {
     if (dragTiles.isEmpty && tiles.isNotEmpty) {
       dragTiles = _createDraggableTiles(dragSize);
     }
+
     List<Widget> widgets = [];
-    if (_status == Status.success) {
-      // success ==> display board
-      widgets.add(Expanded(
-        child: GridView(
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: imageSize,
-            mainAxisExtent: imageSize,
-            crossAxisSpacing: 1.0,
-            mainAxisSpacing: 1.0,
-          ),
-          children: tileWidgets,
-          shrinkWrap: true,
-        ),
-        flex: 7,
+    List<Widget> buttons = [];
+    if (_mode != Mode.history) {
+      buttons.add(IconButton(
+        icon: const Icon(Icons.image_search),
+        onPressed: galleryPicture,
+        tooltip: 'Choose image from gallery',
+        color: Colors.green,
       ));
-    }
-    if (_mode == Mode.view) {
-      int _flex = _status != Status.success ? 0 : 1;
-      widgets.add(Expanded(
-        child: Text(
-          mainText,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
-        ),
-        flex: _flex,
+      buttons.add(IconButton(
+        icon: const Icon(Icons.camera_alt),
+        onPressed: cameraPicture,
+        tooltip: "Choose image from camera",
+        color: Colors.green,
       ));
-    } else if (_mode == Mode.edit) {
-      widgets.add(Expanded(
+      buttons.add(IconButton(
+          icon: const Icon(Icons.read_more),
+          onPressed: _historyLoadMode,
+          tooltip: 'Load past game',
+          color: Colors.green));
+      if (_status == Status.success) {
+        // success ==> display board
+        widgets.add(Expanded(
           child: GridView(
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: dragSize,
-              mainAxisExtent: dragSize,
+              maxCrossAxisExtent: imageSize,
+              mainAxisExtent: imageSize,
               crossAxisSpacing: 1.0,
               mainAxisSpacing: 1.0,
             ),
-            children: dragTiles,
+            children: tileWidgets,
             shrinkWrap: true,
           ),
-          flex: 0));
+          flex: 7,
+        ));
+        buttons.add(IconButton(
+            icon: const Icon(Icons.remove_circle_outline_outlined),
+            onPressed: clearBoard,
+            tooltip: 'Clear Board',
+            color: Colors.red));
+        if (!pastGame) {
+          buttons.add(IconButton(
+              icon: Icon(_mode == Mode.view ? Icons.edit : Icons.save_alt),
+              onPressed: _changeMode,
+              tooltip: _mode == Mode.view ? "View board" : "Edit board",
+              color: Colors.blue));
+        }
+      }
+      if (_mode == Mode.view) {
+        int _flex = _status != Status.success ? 0 : 1;
+        widgets.add(Expanded(
+          child: Text(
+            mainText,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
+          ),
+          flex: _flex,
+        ));
+        if (_status == Status.success && !pastGame) {
+          buttons.add(IconButton(
+              icon: const Icon(Icons.save_rounded),
+              onPressed: saveGame,
+              tooltip: 'Save game',
+              color: Colors.blue));
+        }
+      } else if (_mode == Mode.edit) {
+        widgets.add(Expanded(
+            child: GridView(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: dragSize,
+                mainAxisExtent: dragSize,
+                crossAxisSpacing: 1.0,
+                mainAxisSpacing: 1.0,
+              ),
+              children: dragTiles,
+              shrinkWrap: true,
+            ),
+            flex: 0));
+      }
+    } else {
+      List<Map> data = [];
+      for (History game in history) {
+        data.add({'name': game.name, 'score': game.score});
+      }
+      widgets.add(ListView.builder(
+        itemBuilder: (builder, index) {
+          Map game = data[index];
+          return ListTile(
+            title: Text('${game['name']}'),
+            leading: CircleAvatar(child: Text('${game['score']}')),
+            tileColor:
+                index == _selectedHistoryItem ? Colors.green : Colors.white,
+            onTap: () {
+              setState(() {
+                _selectedHistoryItem = index;
+              });
+            },
+          );
+        },
+        itemCount: data.length,
+        scrollDirection: Axis.vertical,
+        shrinkWrap: true,
+      ));
+      buttons.add(IconButton(
+          icon: const Icon(Icons.remove_circle_outline_outlined),
+          onPressed: _changeMode,
+          tooltip: 'Exit Loading',
+          color: Colors.red));
+      if (history.isNotEmpty) {
+        buttons.add(IconButton(
+            icon: const Icon(Icons.check_circle),
+            onPressed: () => loadGame(history[_selectedHistoryItem].name),
+            tooltip: 'Use this game',
+            color: Colors.green));
+      }
     }
 
     return Scaffold(
@@ -310,37 +503,14 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: widgets,
-          ),
+          child: _mode == Mode.history
+              ? Expanded(child: widgets[0])
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: widgets,
+                ),
         ),
-        bottomNavigationBar: ButtonBar(
-          alignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.image_search),
-              onPressed: galleryPicture,
-              tooltip: 'Choose image from gallery',
-              color: Colors.green,
-            ),
-            IconButton(
-              icon: const Icon(Icons.camera_alt),
-              onPressed: cameraPicture,
-              tooltip: "Choose image from camera",
-              color: Colors.green,
-            ),
-            IconButton(
-                icon: Icon(_mode == Mode.view ? Icons.edit : Icons.save_alt),
-                onPressed: _changeMode,
-                tooltip: _mode == Mode.view ? "view board" : "edit board",
-                color: Colors.blue),
-            IconButton(
-                icon: const Icon(Icons.remove_circle_outline_outlined),
-                onPressed: clearBoard,
-                tooltip: 'Clear Board',
-                color: Colors.red),
-          ],
-        ));
+        bottomNavigationBar:
+            ButtonBar(alignment: MainAxisAlignment.center, children: buttons));
   }
 }
