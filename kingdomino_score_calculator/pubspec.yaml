@@ -33,6 +33,7 @@ dependencies:
   http: any
   image: any
   image_picker: any
+  path_provider: any
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -63,23 +64,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/images/cave_0.png
-    - assets/images/cave_1.png
-    - assets/images/cave_2.png
-    - assets/images/cave_3.png
-    - assets/images/empty.png
-    - assets/images/forest_0.png
-    - assets/images/forest_1.png
-    - assets/images/graveyard_0.png
-    - assets/images/graveyard_1.png
-    - assets/images/graveyard_2.png
-    - assets/images/plains_0.png
-    - assets/images/plains_1.png
-    - assets/images/plains_2.png
-    - assets/images/water_0.png
-    - assets/images/water_1.png
-    - assets/images/wheat_0.png
-    - assets/images/wheat_1.png
+    - assets/images/
     - classes.txt
 
   # An image asset can refer to one or more resolution-specific "variants", see

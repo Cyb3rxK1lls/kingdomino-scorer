@@ -14,3 +14,4 @@ cave_0
 cave_3
 cave_1
 graveyard_1
+empty
