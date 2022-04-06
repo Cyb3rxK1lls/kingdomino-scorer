@@ -79,6 +79,22 @@ class Board {
     _calculateScore();
   }
 
+  List<String> packageBoard() {
+    List<String> tiles = [];
+    int imageSize = board.elementAt(0).size;
+    for (int y = 0; y < numRows; y++) {
+      for (int x = 0; x < numCols; x++) {
+        double xMid = minX + (averageWidth * x);
+        double yMid = minY + (averageHeight * y);
+        String label = _getTile(xMid, yMid).label;
+        tiles.add(
+            '$label ${xMid / imageSize} ${yMid / imageSize} ${averageWidth / imageSize} ${averageHeight / imageSize}');
+      }
+    }
+
+    return tiles;
+  }
+
   List<Tile> _sort(List<Tile> tiles) {
     for (int i = 0; i < tiles.length; i++) {
       for (int j = i + 1; j < tiles.length; j++) {
@@ -95,7 +111,7 @@ class Board {
   /// Gets a single tile based on its coordinates on the board.
   Tile _getTile(double xMid, double yMid) {
     Tile temp = Tile("none", xMid.toDouble(), yMid.toDouble(),
-        averageWidth.toDouble(), averageHeight.toDouble(), 0, 0, true);
+        averageWidth.toDouble(), averageHeight.toDouble(), 0, true);
     for (Tile tile in board) {
       if (tile.inTile(temp)) {
         return tile;
@@ -145,7 +161,7 @@ class Board {
         double nextY = minY + (averageHeight * y);
         if (!_containsTile(nextX, nextY)) {
           Tile newTile = Tile("empty", nextX.toDouble(), nextY.toDouble(),
-              averageWidth.toDouble(), averageHeight.toDouble(), 0, 0, true);
+              averageWidth.toDouble(), averageHeight.toDouble(), 0, true);
           board.insert(y * numCols + x, newTile);
         }
       }

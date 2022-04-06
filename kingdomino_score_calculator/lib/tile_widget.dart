@@ -37,8 +37,12 @@ class _TileWidgetState extends State<TileWidget> {
       },
       onAccept: (data) {
         setState(() {
-          widget.tile.label = data;
-          _image = Image.asset("assets/images/" + data + ".png");
+          if (data == widget.tile.label) {
+            widget.tile.label = 'empty';
+          } else {
+            widget.tile.label = data;
+          }
+          _image = Image.asset("assets/images/" + widget.tile.label + ".png");
         });
       },
     );
