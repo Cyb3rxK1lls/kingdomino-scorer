@@ -36,7 +36,10 @@ class File(Resource):
 
         status = 300 if len(labels) == 0 else 200
         if status == 300:
-            os.remove(os.path.join('receieve', img_file.filename[:len(img_file.filename)-3] + 'txt'))
+            try:
+                os.remove(os.path.join('receieve', img_file.filename[:len(img_file.filename)-3] + 'txt'))
+            except:
+                pass
         return jsonify({'result': status, 'labels': labels.replace('\n', ',')[:len(labels)-1]})
 
 

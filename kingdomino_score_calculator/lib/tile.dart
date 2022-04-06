@@ -10,25 +10,32 @@ class Tile {
   int yMax = 0;
   double xMid = 0;
   double yMid = 0;
+  int size = 0;
   bool explored = false;
 
   Tile(this.label, double xCenter, double yCenter, double tileWidth,
-      double tileHeight, int imageWidth, int imageHeight, bool preProcessed) {
+      double tileHeight, int imageSize, bool preProcessed) {
     if (preProcessed) {
       xMid = xCenter;
       yMid = yCenter;
     } else {
-      crowns = int.parse(label.characters.elementAt(label.length - 1));
-      xMid = xCenter * imageWidth;
-      yMid = yCenter * imageHeight;
-      tileWidth *= imageWidth;
-      tileHeight *= imageHeight;
+      if (label == 'empty') {
+        crowns = 0;
+      } else {
+        crowns = int.parse(label.characters.elementAt(label.length - 1));
+      }
+      xMid = xCenter * imageSize;
+      yMid = yCenter * imageSize;
+      tileWidth *= imageSize;
+      tileHeight *= imageSize;
     }
 
     xMin = (xMid - (tileWidth / 2)).toInt();
     xMax = (xMid + (tileWidth / 2)).toInt();
     yMin = (yMid - (tileHeight / 2)).toInt();
     yMax = (yMid + (tileHeight / 2)).toInt();
+
+    size = imageSize;
   }
 
   /// Sorted by linearized order
@@ -88,7 +95,9 @@ class Tile {
   int get height => yMax - yMin;
 
   void reset() {
-    crowns = int.parse(label.characters.elementAt(label.length - 1));
+    label == 'empty'
+        ? crowns = 0
+        : crowns = int.parse(label.characters.elementAt(label.length - 1));
     score = 0;
     explored = false;
   }
