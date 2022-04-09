@@ -8,12 +8,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kingdomino_score_calculator/board.dart';
 import 'package:kingdomino_score_calculator/history.dart';
+import 'package:kingdomino_score_calculator/text_manager.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
-enum Status { success, loadFailure, noDetections }
-enum Loading { loading, loaded, neither }
-enum Mode { view, edit, history, regular }
+enum Mode { view, edit, history, regular, nul }
 
 void main() {
   runApp(const MyApp());
@@ -47,12 +46,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
   int _selectedHistoryItem = 0;
-  bool recentlySaved = false;
   bool pastGame = false;
-  Loading _load = Loading.neither;
-  Status _status = Status.noDetections;
+  TextManager texter = TextManager(Status.noDetections, Loading.neither);
   Mode _mode = Mode.view;
-  String mainText = "";
   List<String> classes = [];
   List<History> history = [];
   List<Tile> tiles = [];
@@ -61,41 +57,8 @@ class _MyHomePageState extends State<MyHomePage> {
   List<Widget> dragTiles = [];
 
   _MyHomePageState() {
-    _load = Loading.neither;
-    _status = Status.noDetections;
     _loadClasses();
     _loadHistory();
-    _refreshMainText();
-  }
-
-  /// adjusts the main text and size accordingly
-  void _refreshMainText() {
-    if (_load == Loading.loading) {
-      mainText = "loading...";
-    } else {
-      switch (_status) {
-        case Status.success:
-          mainText = "Score: " + board.totalScore.toString();
-          break;
-
-        case Status.loadFailure:
-          mainText = "failed to load image... retry.";
-          break;
-
-        case Status.noDetections:
-          if (_load == Loading.loaded) {
-            mainText = "Found no tiles.";
-          } else {
-            if (recentlySaved) {
-              mainText = "Saved! Select or take picture again";
-              recentlySaved = false;
-            } else {
-              mainText = "Select or take picture";
-            }
-          }
-          break;
-      }
-    }
   }
 
   /// send image to flask server, receive list of detections
@@ -126,25 +89,26 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     setState(() {
-      _load = Loading.loaded;
       switch (resultStatus) {
         case 200:
-          _status = Status.success;
           board = Board(tiles);
           tileWidgets = [];
           for (Tile tile in board.board) {
             tileWidgets.add(TileWidget(tile: tile));
           }
+          texter.update(
+              status: Status.success,
+              load: Loading.loaded,
+              score: board.totalScore.toString());
           break;
 
         case 300:
-          _status = Status.noDetections;
+          texter.update(status: Status.noDetections, load: Loading.loaded);
           break;
 
         default:
-          _status = Status.loadFailure;
+          texter.update(status: Status.loadFailure, load: Loading.loaded);
       }
-      _refreshMainText();
     });
   }
 
@@ -215,8 +179,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     setState(() {
-      _load = Loading.loaded;
-      _status = Status.success;
       _mode = Mode.view;
       board = Board(tiles);
       pastGame = true;
@@ -224,7 +186,10 @@ class _MyHomePageState extends State<MyHomePage> {
       for (Tile tile in board.board) {
         tileWidgets.add(TileWidget(tile: tile));
       }
-      _refreshMainText();
+      texter.update(
+          status: Status.success,
+          load: Loading.loaded,
+          score: board.totalScore.toString());
     });
   }
 
@@ -242,11 +207,11 @@ class _MyHomePageState extends State<MyHomePage> {
     gameFile.writeAsString(newContents);
     history.add(newHistory);
     setState(() {
-      _load = Loading.neither;
-      _status = Status.noDetections;
       board = Board([]);
-      recentlySaved = true;
-      _refreshMainText();
+      texter.update(
+          status: Status.noDetections,
+          load: Loading.neither,
+          recentlySaved: true);
     });
   }
 
@@ -258,9 +223,8 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
     setState(() {
-      _load = Loading.loading;
       _mode = Mode.view;
-      _refreshMainText();
+      texter.update(load: Loading.loading);
     });
     postRequest(XFile(image.path));
   }
@@ -276,18 +240,16 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Clear a board
   void clearBoard() {
     setState(() {
-      _load = Loading.neither;
-      _status = Status.noDetections;
       _mode = Mode.view;
       tileWidgets = [];
-      _refreshMainText();
+      texter.update(status: Status.noDetections, load: Loading.neither);
     });
   }
 
   void _updateTiles() {
     setState(() {
       board.recalculateScore();
-      _refreshMainText();
+      texter.update(score: board.totalScore.toString());
     });
   }
 
@@ -299,8 +261,8 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           _mode = Mode.view;
         }
-      } else if (newMode == Mode.history) {
-        _mode = Mode.history;
+      } else {
+        _mode = newMode;
       }
     });
   }
@@ -399,7 +361,7 @@ class _MyHomePageState extends State<MyHomePage> {
           onPressed: _historyLoadMode,
           tooltip: 'Load past game',
           color: Colors.green));
-      if (_status == Status.success) {
+      if (texter.getStatus == Status.success) {
         // success ==> display board
         widgets.add(Expanded(
           child: GridView(
@@ -428,16 +390,16 @@ class _MyHomePageState extends State<MyHomePage> {
         }
       }
       if (_mode == Mode.view) {
-        int _flex = _status != Status.success ? 0 : 1;
+        int _flex = texter.getStatus != Status.success ? 0 : 1;
         widgets.add(Expanded(
           child: Text(
-            mainText,
+            texter.getText,
             textAlign: TextAlign.center,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
           ),
           flex: _flex,
         ));
-        if (_status == Status.success && !pastGame) {
+        if (texter.getStatus == Status.success && !pastGame) {
           buttons.add(IconButton(
               icon: const Icon(Icons.save_rounded),
               onPressed: saveGame,
