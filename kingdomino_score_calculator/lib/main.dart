@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kingdomino_score_calculator/board.dart';
+import 'package:kingdomino_score_calculator/disk_manager.dart';
 import 'package:kingdomino_score_calculator/history.dart';
 import 'package:kingdomino_score_calculator/text_manager.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
@@ -48,18 +46,12 @@ class _MyHomePageState extends State<MyHomePage> {
   int _selectedHistoryItem = 0;
   bool pastGame = false;
   TextManager texter = TextManager(Status.noDetections, Loading.neither);
+  DiskManager disker = DiskManager();
   Mode _mode = Mode.view;
-  List<String> classes = [];
-  List<History> history = [];
   List<Tile> tiles = [];
   Board board = Board([]);
   List<Widget> tileWidgets = [];
   List<Widget> dragTiles = [];
-
-  _MyHomePageState() {
-    _loadClasses();
-    _loadHistory();
-  }
 
   /// send image to flask server, receive list of detections
   void postRequest(XFile image) async {
@@ -79,7 +71,7 @@ class _MyHomePageState extends State<MyHomePage> {
       for (String detection in detections) {
         List<String> components = detection.split(' ');
         String label =
-            classes.elementAt(int.parse(components.elementAt(0))).trim();
+            disker.labels.elementAt(int.parse(components.elementAt(0)));
         double xMid = double.parse(components.elementAt(1));
         double yMid = double.parse(components.elementAt(2));
         double width = double.parse(components.elementAt(3));
@@ -89,6 +81,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     setState(() {
+      pastGame = false;
       switch (resultStatus) {
         case 200:
           board = Board(tiles);
@@ -112,75 +105,11 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _loadClasses() async {
-    String classesText = await rootBundle.loadString('assets/classes.txt');
-    classes = classesText.split('\n');
-  }
-
-  Future<String> _getPath(String folder) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final Directory desiredFolder = Directory('${directory.path}/$folder/');
-    if (!await desiredFolder.exists()) {
-      desiredFolder.create();
-    }
-    return desiredFolder.path;
-  }
-
-  Future<File> _getFile(String folder, String filename) async {
-    final path = await _getPath(folder);
-    final File desiredFile = File('$path/$filename');
-    if (!await desiredFile.exists()) {
-      return desiredFile.create();
-    }
-    return desiredFile;
-  }
-
-  void _loadHistory() async {
-    File gamelist = await _getFile('', 'historyList.txt');
-    List<String> games = await gamelist.readAsLines();
-    for (String s in games) {
-      String name = s.split(' ')[0];
-      int score = int.parse(s.split(' ')[1]);
-      history.add(History(name, score));
-    }
-  }
-
-  void _writeGame(String filename) async {
-    List<String> boardState = board.packageBoard();
-    File historyFile = await _getFile('history', '$filename.txt');
-    String contents = "";
-    for (String tile in boardState) {
-      contents += tile + '\n';
-    }
-    historyFile.writeAsString(contents);
-  }
-
-  void _writeStats(String filename) async {
-    File statsFile = await _getFile('', 'aggregateStats.txt');
-    // TODO
-  }
-
   void loadGame(String filename) async {
-    List<Tile> tiles = [];
-    File gameFile = await _getFile('history', '$filename.txt');
-    String content = await gameFile.readAsString();
-    List<String> packedTiles = content.split('\n');
-    for (String tile in packedTiles) {
-      if (tile.isEmpty) {
-        continue;
-      }
-      List<String> components = tile.split(' ');
-      String label = components.elementAt(0);
-      double xMid = double.parse(components.elementAt(1));
-      double yMid = double.parse(components.elementAt(2));
-      double width = double.parse(components.elementAt(3));
-      double height = double.parse(components.elementAt(4));
-      tiles.add(Tile(label, xMid, yMid, width, height, imageSize, false));
-    }
-
+    Board newBoard = await disker.loadGame(filename, imageSize);
     setState(() {
       _mode = Mode.view;
-      board = Board(tiles);
+      board = newBoard;
       pastGame = true;
       tileWidgets = [];
       for (Tile tile in board.board) {
@@ -194,18 +123,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void saveGame() async {
-    DateTime time = DateTime.now();
-    String filename = '${time.year.toString()}_${time.month.toString()}_';
-    filename += '${time.day.toString()}_${time.hour.toString()}_';
-    filename += '${time.minute.toString()}_${time.second.toString()}';
-    _writeStats(filename);
-    _writeGame(filename);
-    History newHistory = History(filename, board.totalScore);
-    File gameFile = await _getFile('', 'historyList.txt');
-    final contents = await gameFile.readAsString();
-    String newContents = contents + newHistory.toString() + '\n';
-    gameFile.writeAsString(newContents);
-    history.add(newHistory);
+    disker.saveGame(board);
     setState(() {
       board = Board([]);
       texter.update(
@@ -261,7 +179,7 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           _mode = Mode.view;
         }
-      } else {
+      } else if (newMode == Mode.history) {
         _mode = newMode;
       }
     });
@@ -272,55 +190,17 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   List<Widget> _createDraggableTiles(double size) {
-    List<String> labels = [
-      'cave_0',
-      'cave_1',
-      'cave_2',
-      'cave_3',
-      'forest_0',
-      'forest_1',
-      'water_0',
-      'water_1',
-      'wheat_0',
-      'wheat_1',
-      'graveyard_0',
-      'graveyard_1',
-      'graveyard_2',
-      'plains_0',
-      'plains_1',
-      'plains_2'
-    ];
     List<Widget> widgets = [];
+    List<String> labels = disker.labels.toList();
+    labels.sort();
+    labels.remove('empty');
     for (String label in labels) {
-      label.replaceAll('\n', '');
-      if (label == '') {
-        continue;
-      }
-
       Draggable<String> drag = Draggable<String>(
         // Data is the value this Draggable stores.
         data: label,
-        child: SizedBox(
-          height: size,
-          width: size,
-          child: Center(
-            child: Image.asset('assets/images/' + label + '.png'),
-          ),
-        ),
-        feedback: SizedBox(
-          height: size,
-          width: size,
-          child: Center(
-            child: Image.asset('assets/images/' + label + '.png'),
-          ),
-        ),
-        childWhenDragging: SizedBox(
-          height: size,
-          width: size,
-          child: Center(
-            child: Image.asset('assets/images/empty.png'),
-          ),
-        ),
+        child: getDraggableBox(label, size),
+        feedback: getDraggableBox(label, size),
+        childWhenDragging: getDraggableBox('empty', size),
         onDragCompleted: () {
           _updateTiles();
         },
@@ -328,6 +208,15 @@ class _MyHomePageState extends State<MyHomePage> {
       widgets.add(drag);
     }
     return widgets;
+  }
+
+  Widget getDraggableBox(String label, double size) {
+    return SizedBox(
+        height: size,
+        width: size,
+        child: Center(
+          child: Image.asset('assets/images/' + label + '.png'),
+        ));
   }
 
   @override
@@ -422,7 +311,7 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     } else {
       List<Map> data = [];
-      for (History game in history) {
+      for (History game in disker.history) {
         data.add({'name': game.name, 'score': game.score});
       }
       widgets.add(ListView.builder(
@@ -449,10 +338,11 @@ class _MyHomePageState extends State<MyHomePage> {
           onPressed: _changeMode,
           tooltip: 'Exit Loading',
           color: Colors.red));
-      if (history.isNotEmpty) {
+      if (disker.history.isNotEmpty) {
         buttons.add(IconButton(
             icon: const Icon(Icons.check_circle),
-            onPressed: () => loadGame(history[_selectedHistoryItem].name),
+            onPressed: () =>
+                loadGame(disker.history[_selectedHistoryItem].name),
             tooltip: 'Use this game',
             color: Colors.green));
       }
