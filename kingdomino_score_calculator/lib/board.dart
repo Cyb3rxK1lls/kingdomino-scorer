@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'dart:math';
 
@@ -213,6 +215,36 @@ class Board {
         tile.explored = true;
       }
     }
+  }
+
+  HashMap<String, int> getStatistics() {
+    HashMap<String, int> stats = HashMap();
+    for (Tile tile in board) {
+      if (tile.region == 'empty') {
+        continue;
+      } else if (stats.containsKey(tile.region + 'Score')) {
+        stats[tile.region + 'Score'] =
+            stats[tile.region + 'Score']! + tile.score;
+        stats[tile.region + 'Tiles'] = stats[tile.region + 'Tiles']! + 1;
+      } else {
+        stats[tile.region + 'Score'] = tile.score;
+        stats[tile.region + 'Tiles'] = 1;
+      }
+    }
+    stats.putIfAbsent('wheatScore', () => 0);
+    stats.putIfAbsent('forestScore', () => 0);
+    stats.putIfAbsent('caveScore', () => 0);
+    stats.putIfAbsent('graveyardScore', () => 0);
+    stats.putIfAbsent('plainsScore', () => 0);
+    stats.putIfAbsent('waterScore', () => 0);
+    stats.putIfAbsent('wheatTiles', () => 0);
+    stats.putIfAbsent('forestTiles', () => 0);
+    stats.putIfAbsent('caveTiles', () => 0);
+    stats.putIfAbsent('graveyardTiles', () => 0);
+    stats.putIfAbsent('plainsTiles', () => 0);
+    stats.putIfAbsent('waterTiles', () => 0);
+
+    return stats;
   }
 
   /// Will get all legal adjacent tiles to a tile.
