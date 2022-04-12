@@ -6,11 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:kingdomino_score_calculator/board.dart';
 import 'package:kingdomino_score_calculator/disk_manager.dart';
 import 'package:kingdomino_score_calculator/history.dart';
+import 'package:kingdomino_score_calculator/stat_manager.dart';
 import 'package:kingdomino_score_calculator/text_manager.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
-enum Mode { view, edit, history, regular, nul }
+enum Mode { view, edit, history, stats, regular }
 
 void main() {
   runApp(const MyApp());
@@ -47,6 +48,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool pastGame = false;
   TextManager texter = TextManager(Status.noDetections, Loading.neither);
   DiskManager disker = DiskManager();
+  late StatManager statser = StatManager(disker);
   Mode _mode = Mode.view;
   List<Tile> tiles = [];
   Board board = Board([]);
@@ -108,7 +110,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void loadGame(String filename) async {
     Board newBoard = await disker.loadGame(filename, imageSize);
     setState(() {
-      _mode = Mode.view;
+      _changeMode(newMode: Mode.view);
       board = newBoard;
       pastGame = true;
       tileWidgets = [];
@@ -124,6 +126,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void saveGame() async {
     disker.saveGame(board);
+    statser.saveGame(board);
     setState(() {
       board = Board([]);
       texter.update(
@@ -141,7 +144,7 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
     setState(() {
-      _mode = Mode.view;
+      _changeMode(newMode: Mode.view);
       texter.update(load: Loading.loading);
     });
     postRequest(XFile(image.path));
@@ -158,7 +161,7 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Clear a board
   void clearBoard() {
     setState(() {
-      _mode = Mode.view;
+      _changeMode(newMode: Mode.view);
       tileWidgets = [];
       texter.update(status: Status.noDetections, load: Loading.neither);
     });
@@ -179,14 +182,10 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           _mode = Mode.view;
         }
-      } else if (newMode == Mode.history) {
+      } else {
         _mode = newMode;
       }
     });
-  }
-
-  void _historyLoadMode() {
-    _changeMode(newMode: Mode.history);
   }
 
   List<Widget> _createDraggableTiles(double size) {
@@ -198,9 +197,9 @@ class _MyHomePageState extends State<MyHomePage> {
       Draggable<String> drag = Draggable<String>(
         // Data is the value this Draggable stores.
         data: label,
-        child: getDraggableBox(label, size),
-        feedback: getDraggableBox(label, size),
-        childWhenDragging: getDraggableBox('empty', size),
+        child: _getDraggableBox(label, size),
+        feedback: _getDraggableBox(label, size),
+        childWhenDragging: _getDraggableBox('empty', size),
         onDragCompleted: () {
           _updateTiles();
         },
@@ -210,13 +209,185 @@ class _MyHomePageState extends State<MyHomePage> {
     return widgets;
   }
 
-  Widget getDraggableBox(String label, double size) {
+  Widget _getDraggableBox(String label, double size) {
     return SizedBox(
         height: size,
         width: size,
         child: Center(
           child: Image.asset('assets/images/' + label + '.png'),
         ));
+  }
+
+  List<Widget> getGeneralButtons() {
+    List<Widget> buttons = [];
+    buttons.add(IconButton(
+      icon: const Icon(Icons.image_search),
+      onPressed: galleryPicture,
+      tooltip: 'Choose image from gallery',
+      color: Colors.green,
+    ));
+    buttons.add(IconButton(
+      icon: const Icon(Icons.camera_alt),
+      onPressed: cameraPicture,
+      tooltip: "Choose image from camera",
+      color: Colors.green,
+    ));
+    buttons.add(IconButton(
+        icon: const Icon(Icons.history),
+        onPressed: () => _changeMode(newMode: Mode.history),
+        tooltip: 'Load past game',
+        color: Colors.green));
+    buttons.add(IconButton(
+        icon: const Icon(Icons.read_more_outlined),
+        onPressed: () => _changeMode(newMode: Mode.stats),
+        tooltip: 'Load past game',
+        color: Colors.green));
+    return buttons;
+  }
+
+  List<Widget> getSuccessWidgets(double imageSize) {
+    List<Widget> widgets = [];
+    widgets.add(Expanded(
+      child: GridView(
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: imageSize,
+          mainAxisExtent: imageSize,
+          crossAxisSpacing: 1.0,
+          mainAxisSpacing: 1.0,
+        ),
+        children: tileWidgets,
+        shrinkWrap: true,
+      ),
+      flex: 7,
+    ));
+    return widgets;
+  }
+
+  List<Widget> getSuccessButtons() {
+    List<Widget> buttons = [];
+    buttons.add(IconButton(
+        icon: const Icon(Icons.remove_circle_outline_outlined),
+        onPressed: clearBoard,
+        tooltip: 'Clear Board',
+        color: Colors.red));
+    if (!pastGame) {
+      buttons.add(IconButton(
+          icon: Icon(_mode == Mode.view ? Icons.edit : Icons.save_alt),
+          onPressed: _changeMode,
+          tooltip: _mode == Mode.view ? "View board" : "Edit board",
+          color: Colors.blue));
+    }
+    return buttons;
+  }
+
+  List<Widget> getViewWidgets() {
+    List<Widget> widgets = [];
+    int _flex = texter.getStatus != Status.success ? 0 : 1;
+    widgets.add(Expanded(
+      child: Text(
+        texter.getText,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
+      ),
+      flex: _flex,
+    ));
+    return widgets;
+  }
+
+  List<Widget> getViewButtons() {
+    List<Widget> buttons = [];
+    if (texter.getStatus == Status.success && !pastGame) {
+      buttons.add(IconButton(
+          icon: const Icon(Icons.save_rounded),
+          onPressed: saveGame,
+          tooltip: 'Save game',
+          color: Colors.blue));
+    }
+    return buttons;
+  }
+
+  List<Widget> getEditWidgets(double dragSize) {
+    List<Widget> widgets = [];
+    widgets.add(Expanded(
+        child: GridView(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: dragSize,
+            mainAxisExtent: dragSize,
+            crossAxisSpacing: 1.0,
+            mainAxisSpacing: 1.0,
+          ),
+          children: dragTiles,
+          shrinkWrap: true,
+        ),
+        flex: 0));
+    return widgets;
+  }
+
+  List<Widget> getHistoryButtons() {
+    List<Widget> buttons = [];
+    buttons.add(IconButton(
+        icon: const Icon(Icons.remove_circle_outline_outlined),
+        onPressed: _changeMode,
+        tooltip: 'Exit history view',
+        color: Colors.red));
+    if (disker.history.isNotEmpty) {
+      buttons.add(IconButton(
+          icon: const Icon(Icons.check_circle),
+          onPressed: () => loadGame(disker.history[_selectedHistoryItem].name),
+          tooltip: 'Use this game',
+          color: Colors.green));
+    }
+    return buttons;
+  }
+
+  List<Widget> getHistoryWidgets() {
+    List<Widget> widgets = [];
+    List<Map> data = [];
+    for (History game in disker.history) {
+      data.add({'name': game.name, 'score': game.score});
+    }
+    widgets.add(ListView.builder(
+      itemBuilder: (builder, index) {
+        Map game = data[index];
+        return ListTile(
+          title: Text('${game['name']}'),
+          leading: CircleAvatar(child: Text('${game['score']}')),
+          tileColor:
+              index == _selectedHistoryItem ? Colors.green : Colors.white,
+          onTap: () {
+            setState(() {
+              _selectedHistoryItem = index;
+            });
+          },
+        );
+      },
+      itemCount: data.length,
+      scrollDirection: Axis.vertical,
+      shrinkWrap: true,
+    ));
+    return widgets;
+  }
+
+  List<Widget> getStatsButtons() {
+    List<Widget> buttons = [];
+    buttons.add(IconButton(
+        icon: const Icon(Icons.remove_circle_outline_outlined),
+        onPressed: _changeMode,
+        tooltip: 'Exit stats view',
+        color: Colors.red));
+    return buttons;
+  }
+
+  List<Widget> getStatsWidgets() {
+    List<Widget> widgets = [];
+    for (String value in statser.getDisplayedStats()) {
+      widgets.add(Text(
+        value,
+        textAlign: TextAlign.right,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28),
+      ));
+    }
+    return widgets;
   }
 
   @override
@@ -232,119 +403,24 @@ class _MyHomePageState extends State<MyHomePage> {
 
     List<Widget> widgets = [];
     List<Widget> buttons = [];
-    if (_mode != Mode.history) {
-      buttons.add(IconButton(
-        icon: const Icon(Icons.image_search),
-        onPressed: galleryPicture,
-        tooltip: 'Choose image from gallery',
-        color: Colors.green,
-      ));
-      buttons.add(IconButton(
-        icon: const Icon(Icons.camera_alt),
-        onPressed: cameraPicture,
-        tooltip: "Choose image from camera",
-        color: Colors.green,
-      ));
-      buttons.add(IconButton(
-          icon: const Icon(Icons.read_more),
-          onPressed: _historyLoadMode,
-          tooltip: 'Load past game',
-          color: Colors.green));
+    if (_mode == Mode.history) {
+      widgets.addAll(getHistoryWidgets());
+      buttons.addAll(getHistoryButtons());
+    } else if (_mode == Mode.stats) {
+      widgets.addAll(getStatsWidgets());
+      buttons.addAll(getStatsButtons());
+    } else {
+      buttons.addAll(getGeneralButtons());
       if (texter.getStatus == Status.success) {
         // success ==> display board
-        widgets.add(Expanded(
-          child: GridView(
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: imageSize,
-              mainAxisExtent: imageSize,
-              crossAxisSpacing: 1.0,
-              mainAxisSpacing: 1.0,
-            ),
-            children: tileWidgets,
-            shrinkWrap: true,
-          ),
-          flex: 7,
-        ));
-        buttons.add(IconButton(
-            icon: const Icon(Icons.remove_circle_outline_outlined),
-            onPressed: clearBoard,
-            tooltip: 'Clear Board',
-            color: Colors.red));
-        if (!pastGame) {
-          buttons.add(IconButton(
-              icon: Icon(_mode == Mode.view ? Icons.edit : Icons.save_alt),
-              onPressed: _changeMode,
-              tooltip: _mode == Mode.view ? "View board" : "Edit board",
-              color: Colors.blue));
-        }
+        widgets.addAll(getSuccessWidgets(imageSize));
+        buttons.addAll(getSuccessButtons());
       }
       if (_mode == Mode.view) {
-        int _flex = texter.getStatus != Status.success ? 0 : 1;
-        widgets.add(Expanded(
-          child: Text(
-            texter.getText,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 42),
-          ),
-          flex: _flex,
-        ));
-        if (texter.getStatus == Status.success && !pastGame) {
-          buttons.add(IconButton(
-              icon: const Icon(Icons.save_rounded),
-              onPressed: saveGame,
-              tooltip: 'Save game',
-              color: Colors.blue));
-        }
+        widgets.addAll(getViewWidgets());
+        buttons.addAll(getViewButtons());
       } else if (_mode == Mode.edit) {
-        widgets.add(Expanded(
-            child: GridView(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: dragSize,
-                mainAxisExtent: dragSize,
-                crossAxisSpacing: 1.0,
-                mainAxisSpacing: 1.0,
-              ),
-              children: dragTiles,
-              shrinkWrap: true,
-            ),
-            flex: 0));
-      }
-    } else {
-      List<Map> data = [];
-      for (History game in disker.history) {
-        data.add({'name': game.name, 'score': game.score});
-      }
-      widgets.add(ListView.builder(
-        itemBuilder: (builder, index) {
-          Map game = data[index];
-          return ListTile(
-            title: Text('${game['name']}'),
-            leading: CircleAvatar(child: Text('${game['score']}')),
-            tileColor:
-                index == _selectedHistoryItem ? Colors.green : Colors.white,
-            onTap: () {
-              setState(() {
-                _selectedHistoryItem = index;
-              });
-            },
-          );
-        },
-        itemCount: data.length,
-        scrollDirection: Axis.vertical,
-        shrinkWrap: true,
-      ));
-      buttons.add(IconButton(
-          icon: const Icon(Icons.remove_circle_outline_outlined),
-          onPressed: _changeMode,
-          tooltip: 'Exit Loading',
-          color: Colors.red));
-      if (disker.history.isNotEmpty) {
-        buttons.add(IconButton(
-            icon: const Icon(Icons.check_circle),
-            onPressed: () =>
-                loadGame(disker.history[_selectedHistoryItem].name),
-            tooltip: 'Use this game',
-            color: Colors.green));
+        widgets.addAll(getEditWidgets(dragSize));
       }
     }
 
@@ -358,7 +434,12 @@ class _MyHomePageState extends State<MyHomePage> {
           child: _mode == Mode.history
               ? Expanded(child: widgets[0])
               : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: _mode == Mode.stats
+                      ? MainAxisAlignment.spaceEvenly
+                      : MainAxisAlignment.center,
+                  crossAxisAlignment: _mode == Mode.stats
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.center,
                   children: widgets,
                 ),
         ),

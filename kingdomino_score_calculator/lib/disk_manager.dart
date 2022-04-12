@@ -67,9 +67,9 @@ class DiskManager {
     historyFile.writeAsString(contents);
   }
 
-  void _writeStats(String filename) async {
-    File statsFile = await getFile('', 'aggregateStats.txt');
-    // TODO
+  void writeStats(String contents) async {
+    File statsFile = await getFile('', 'stats.txt');
+    statsFile.writeAsString(contents);
   }
 
   Future<Board> loadGame(String filename, int imageSize) async {
@@ -98,7 +98,6 @@ class DiskManager {
     String filename = '${time.year.toString()}_${time.month.toString()}_';
     filename += '${time.day.toString()}_${time.hour.toString()}_';
     filename += '${time.minute.toString()}_${time.second.toString()}';
-    _writeStats(filename);
     _writeGame(filename, board.packageBoard());
     History newHistory = History(filename, board.totalScore);
     File gameFile = await getFile('', 'historyList.txt');
