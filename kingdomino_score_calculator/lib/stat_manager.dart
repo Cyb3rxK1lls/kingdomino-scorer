@@ -4,7 +4,9 @@ import 'package:kingdomino_score_calculator/disk_manager.dart';
 
 class StatManager {
   DiskManager disker;
-  StatManager(this.disker);
+  StatManager(this.disker) {
+    _initialize();
+  }
 
   final double wheatWeight = 1.0 / 26;
   final double forestWeight = 1.0 / 22;
@@ -46,6 +48,11 @@ class StatManager {
   double averageGraveyardTiles = 0;
   double averagePlainsTiles = 0;
   double averageWaterTiles = 0;
+
+  void _initialize() async {
+    String stats = await disker.loadStats();
+    _loadContents(stats);
+  }
 
   void saveGame(Board game) {
     gamesPlayed += 1;
@@ -145,7 +152,7 @@ class StatManager {
     return output;
   }
 
-  void loadContents(String contents) {
+  void _loadContents(String contents) {
     if (contents.isEmpty) {
       return;
     }

@@ -72,6 +72,11 @@ class DiskManager {
     statsFile.writeAsString(contents);
   }
 
+  Future<String> loadStats() async {
+    File statsFile = await getFile('', 'stats.txt');
+    return await statsFile.readAsString();
+  }
+
   Future<Board> loadGame(String filename, int imageSize) async {
     List<Tile> tiles = [];
     File gameFile = await getFile('history', '$filename.txt');
