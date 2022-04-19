@@ -12,7 +12,7 @@ class File(Resource):
 
     def get(self):
         response = jsonify({'status': 200})
-        
+
         response.headers.add("Access-Control-Allow-Origin", "*")
         return response
 
@@ -21,7 +21,13 @@ class File(Resource):
 
         # Read the image via file.stream
         img = Image.open(img_file.stream)
-        img = img.resize((640, 640))
+        width, height = img.size
+        padded_width = 0 if width >= height else height - width
+        padded_height = 0 if width <= height else width - height
+
+        new_img = Image.new('RGB', (padded_width + width, padded_height + height), (255, 255, 255))
+        new_img.paste(img, img.getbbox())
+        img = new_img.resize((640, 640))
         img.save(os.path.join('temp', img_file.filename))
 
         # run through models and receive list
