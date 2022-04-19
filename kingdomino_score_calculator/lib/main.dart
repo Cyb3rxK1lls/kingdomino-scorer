@@ -57,6 +57,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   /// send image to flask server, receive list of detections
   void postRequest(XFile image) async {
+    clearBoard(updateText: true);
     tiles = [];
     var request = http.MultipartRequest('POST', Uri.parse(_url));
     request.files.add(http.MultipartFile.fromBytes(
@@ -159,11 +160,13 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   /// Clear a board
-  void clearBoard() {
+  void clearBoard({bool updateText = true}) {
     setState(() {
       _changeMode(newMode: Mode.view);
       tileWidgets = [];
-      texter.update(status: Status.noDetections, load: Loading.neither);
+      if (updateText) {
+        texter.update(status: Status.noDetections, load: Loading.neither);
+      }
     });
   }
 
