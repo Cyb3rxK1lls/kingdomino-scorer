@@ -4,9 +4,7 @@ import 'package:kingdomino_score_calculator/disk_manager.dart';
 
 class StatManager {
   DiskManager disker;
-  StatManager(this.disker) {
-    _initialize();
-  }
+  StatManager(this.disker);
 
   final double wheatWeight = 1.0 / 26;
   final double forestWeight = 1.0 / 22;
@@ -18,6 +16,8 @@ class StatManager {
   int gamesPlayed = 0;
   int highestScore = 0;
   String favoriteRegion = "None";
+  bool initialized = false;
+  List<String> stats = ["Exit and reopen"];
 
   int totalScore = 0;
   int totalWheatScore = 0;
@@ -49,12 +49,16 @@ class StatManager {
   double averagePlainsTiles = 0;
   double averageWaterTiles = 0;
 
-  void _initialize() async {
+  Future<void> _initialize() async {
     String stats = await disker.loadStats();
     _loadContents(stats);
+    initialized = true;
   }
 
-  void saveGame(Board game) {
+  void saveGame(Board game) async {
+    if (!initialized) {
+      await _initialize();
+    }
     gamesPlayed += 1;
     totalScore += game.totalScore;
     averageScore = totalScore / gamesPlayed.toDouble();
@@ -120,21 +124,8 @@ class StatManager {
   }
 
   List<String> getDisplayedStats() {
-    List<String> output = [];
-    output.add("Games played: $gamesPlayed");
-    output.add("Average score: ${averageScore.toStringAsFixed(2)}");
-    output.add("Highest score: $highestScore");
-    output.add("Favorite region: $favoriteRegion");
-    output.add("Average wheat score: ${averageWheatScore.toStringAsFixed(2)}");
-    output
-        .add("Average forest score: ${averageForestScore.toStringAsFixed(2)}");
-    output.add("Average cave score: ${averageCaveScore.toStringAsFixed(2)}");
-    output.add(
-        "Average graveyard score: ${averageGraveyardScore.toStringAsFixed(2)}");
-    output
-        .add("Average plains score: ${averagePlainsScore.toStringAsFixed(2)}");
-    output.add("Average water score: ${averageWaterScore.toStringAsFixed(2)}");
-    return output;
+    _generateStats();
+    return stats;
   }
 
   String _packContents() {
@@ -150,6 +141,28 @@ class StatManager {
     output += "$averageCaveTiles,$averageGraveyardTiles,$averagePlainsTiles,";
     output += "$averageWaterTiles";
     return output;
+  }
+
+  void _generateStats() async {
+    if (!initialized) {
+      await _initialize();
+    }
+
+    List<String> output = [];
+    output.add("Games played: $gamesPlayed");
+    output.add("Average score: ${averageScore.toStringAsFixed(2)}");
+    output.add("Highest score: $highestScore");
+    output.add("Favorite region: $favoriteRegion");
+    output.add("Average wheat score: ${averageWheatScore.toStringAsFixed(2)}");
+    output
+        .add("Average forest score: ${averageForestScore.toStringAsFixed(2)}");
+    output.add("Average cave score: ${averageCaveScore.toStringAsFixed(2)}");
+    output.add(
+        "Average graveyard score: ${averageGraveyardScore.toStringAsFixed(2)}");
+    output
+        .add("Average plains score: ${averagePlainsScore.toStringAsFixed(2)}");
+    output.add("Average water score: ${averageWaterScore.toStringAsFixed(2)}");
+    stats = output;
   }
 
   void _loadContents(String contents) {
