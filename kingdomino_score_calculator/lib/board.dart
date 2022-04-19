@@ -138,6 +138,7 @@ class Board {
     int y = 0;
     int stop = board.length;
     while (x < stop) {
+      y = 0;
       while (y < stop) {
         if (x == y) {
           y += 1;
@@ -150,6 +151,19 @@ class Board {
           stop -= 1;
         }
         y += 1;
+      }
+      List<Tile> adjacentTiles = _getAdjacentTiles(board.elementAt(x));
+      for (Tile tile in adjacentTiles) {
+        if (tile == board.elementAt(x)) {
+          board[x] = Tile(
+              tile.label,
+              (tile.xMax - (averageWidth / 2.0)).toDouble(),
+              (tile.yMax - (averageHeight / 2.0)).toDouble(),
+              averageWidth.toDouble(),
+              averageHeight.toDouble(),
+              640,
+              true);
+        }
       }
       x += 1;
     }
@@ -165,6 +179,8 @@ class Board {
           Tile newTile = Tile("empty", nextX.toDouble(), nextY.toDouble(),
               averageWidth.toDouble(), averageHeight.toDouble(), 0, true);
           board.insert(y * numCols + x, newTile);
+          y = 0;
+          x = 0;
         }
       }
     }
@@ -249,18 +265,20 @@ class Board {
 
   /// Will get all legal adjacent tiles to a tile.
   List<Tile> _getAdjacentTiles(Tile tile) {
+    double xMid = tile.xMin + (averageWidth / 2.0);
+    double yMid = tile.yMin + (averageHeight / 2.0);
     List<Tile> adjacentTiles = [];
-    if (_containsTile(tile.xMid + averageWidth, tile.yMid)) {
-      adjacentTiles.add(_getTile(tile.xMid + averageWidth, tile.yMid));
+    if (_containsTile(xMid + averageWidth, yMid)) {
+      adjacentTiles.add(_getTile(xMid + averageWidth, yMid));
     }
-    if (_containsTile(tile.xMid - averageWidth, tile.yMid)) {
-      adjacentTiles.add(_getTile(tile.xMid - averageWidth, tile.yMid));
+    if (_containsTile(xMid - averageWidth, yMid)) {
+      adjacentTiles.add(_getTile(xMid - averageWidth, yMid));
     }
-    if (_containsTile(tile.xMid, tile.yMid + averageHeight)) {
-      adjacentTiles.add(_getTile(tile.xMid, tile.yMid + averageHeight));
+    if (_containsTile(xMid, yMid + averageHeight)) {
+      adjacentTiles.add(_getTile(xMid, yMid + averageHeight));
     }
-    if (_containsTile(tile.xMid, tile.yMid - averageHeight)) {
-      adjacentTiles.add(_getTile(tile.xMid, tile.yMid - averageHeight));
+    if (_containsTile(xMid, yMid - averageHeight)) {
+      adjacentTiles.add(_getTile(xMid, yMid - averageHeight));
     }
     return adjacentTiles;
   }
