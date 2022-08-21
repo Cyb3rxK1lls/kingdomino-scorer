@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
+import 'package:camera_camera/camera_camera.dart';
 import 'package:kingdomino_score_calculator/board.dart';
 import 'package:kingdomino_score_calculator/disk_manager.dart';
 import 'package:kingdomino_score_calculator/history.dart';
@@ -11,37 +13,39 @@ import 'package:kingdomino_score_calculator/text_manager.dart';
 import 'package:kingdomino_score_calculator/tile.dart';
 import 'package:kingdomino_score_calculator/tile_widget.dart';
 
-enum Mode { view, edit, history, stats, regular }
+enum Mode { view, edit, history, stats, regular, camera }
 
-void main() {
-  runApp(const MyApp());
-}
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final cameras = await availableCameras();
+  final firstCamera = cameras.first;
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  runApp(
+    MaterialApp(
       title: 'Kingdomino Score Calculator - Beta',
       theme: ThemeData(
         primarySwatch: Colors.red,
       ),
-      home: const MyHomePage(),
-    );
-  }
+      home: MyHomePage(
+        camera: firstCamera,
+      ),
+    ),
+  );
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key}) : super(key: key);
+  const MyHomePage({Key? key, required this.camera}) : super(key: key);
+  final CameraDescription camera;
+
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
   //10.0.2.2 while using emulator, 10.129.16.113 if using device
-  final String _url = "http://10.0.2.2:5000/file";
-  // "http://10.129.16.113:8000/file";
+  final String _url = // "http://10.0.2.2:5000/file";
+      "http://192.168.1.4:8000/file";
+
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
   int _selectedHistoryItem = 0;
@@ -54,16 +58,39 @@ class _MyHomePageState extends State<MyHomePage> {
   Board board = Board([]);
   List<Widget> tileWidgets = [];
   List<Widget> dragTiles = [];
+  late CameraController _controller;
+  late Future<void> _initializeControllerFuture;
+  PreferredSizeWidget topBar = AppBar(
+      title: const Text(
+    'Kingdomino Scorer - Beta',
+  ));
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CameraController(
+      widget.camera,
+      ResolutionPreset.medium,
+    );
+    _initializeControllerFuture = _controller.initialize();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   /// send image to flask server, receive list of detections
   void postRequest(XFile image) async {
-    clearBoard(updateText: true);
+    clearBoard(updateText: false);
     tiles = [];
     var request = http.MultipartRequest('POST', Uri.parse(_url));
     request.files.add(http.MultipartFile.fromBytes(
         'picture', await image.readAsBytes(),
         filename: image.name));
 
+    print("sending request to " + _url);
     var result = await request.send();
     String str = await result.stream.bytesToString();
     int resultStatus = int.parse(str.substring(str.length - 6, str.length - 3));
@@ -144,6 +171,10 @@ class _MyHomePageState extends State<MyHomePage> {
       // null ==> user canceled their action
       return;
     }
+    processImage(image);
+  }
+
+  void processImage(XFile image) {
     setState(() {
       _changeMode(newMode: Mode.view);
       texter.update(load: Loading.loading);
@@ -155,8 +186,11 @@ class _MyHomePageState extends State<MyHomePage> {
     chooseImage(ImageSource.gallery);
   }
 
-  void cameraPicture() async {
-    chooseImage(ImageSource.camera);
+  void cameraPicture() {
+    setState(() {
+      _changeMode(newMode: Mode.camera);
+    });
+    // chooseImage(ImageSource.camera);
   }
 
   /// Clear a board
@@ -188,6 +222,149 @@ class _MyHomePageState extends State<MyHomePage> {
       } else {
         _mode = newMode;
       }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+    double imageSize =
+        min(screenWidth / board.numCols, screenHeight / board.numRows);
+    double dragSize = min(screenWidth, screenHeight) / 8.0;
+    if (dragTiles.isEmpty && tiles.isNotEmpty) {
+      dragTiles = _createDraggableTiles(dragSize);
+    }
+
+    if (_mode == Mode.camera) {
+      // return just the camera, nothing else
+      final scale = 1 /
+          (_controller.value.aspectRatio *
+              MediaQuery.of(context).size.aspectRatio);
+      return Scaffold(
+        appBar: topBar,
+        body: FutureBuilder<void>(
+          future: _initializeControllerFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              // return CameraPreview(_controller);
+              return Transform.scale(
+                  scale: _controller.value.aspectRatio,
+                  alignment: Alignment.center,
+                  child: Stack(fit: StackFit.expand, children: [
+                    CameraPreview(_controller),
+                    cameraOverlay(padding: 80, color: const Color(0x55000000))
+                  ]));
+            } else {
+              return const Center(child: CircularProgressIndicator());
+            }
+          },
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () async {
+            try {
+              await _initializeControllerFuture;
+              final image = await _controller.takePicture();
+              if (!mounted) return;
+
+              // if the picture was taken, process it.
+              processImage(image);
+            } catch (e) {
+              print(e);
+            }
+          },
+          child: const Icon(Icons.camera_alt),
+        ),
+      );
+    }
+
+    List<Widget> widgets = [];
+    List<Widget> buttons = [];
+    if (_mode == Mode.history) {
+      widgets.addAll(getHistoryWidgets());
+      buttons.addAll(getHistoryButtons());
+    } else if (_mode == Mode.stats) {
+      widgets.addAll(getStatsWidgets());
+      buttons.addAll(getStatsButtons());
+    } else {
+      if (texter.getStatus == Status.success) {
+        // success ==> display board
+        widgets.addAll(getSuccessWidgets(imageSize));
+        buttons.addAll(getSuccessButtons());
+      } else {
+        buttons.addAll(getGeneralButtons());
+      }
+      if (_mode == Mode.view) {
+        widgets.addAll(getViewWidgets());
+        buttons.addAll(getViewButtons());
+      } else if (_mode == Mode.edit) {
+        widgets.addAll(getEditWidgets(dragSize));
+      }
+    }
+
+    return Scaffold(
+        appBar: topBar,
+        body: Center(
+          child: _mode == Mode.history
+              ? Expanded(child: widgets[0])
+              : Column(
+                  mainAxisAlignment: _mode == Mode.stats
+                      ? MainAxisAlignment.spaceEvenly
+                      : MainAxisAlignment.center,
+                  crossAxisAlignment: _mode == Mode.stats
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.center,
+                  children: widgets,
+                ),
+        ),
+        bottomNavigationBar:
+            ButtonBar(alignment: MainAxisAlignment.center, children: buttons));
+  }
+
+  // grabbed from https://stackoverflow.com/questions/56276522/square-camera-overlay-using-flutter
+  Widget cameraOverlay({double? padding, Color? color}) {
+    return LayoutBuilder(builder: (context, constraints) {
+      double aspectRatio = constraints.maxWidth / constraints.maxHeight;
+      double horizontalPadding;
+      double verticalPadding;
+
+      if (aspectRatio < 1) {
+        horizontalPadding = padding!;
+        verticalPadding =
+            (constraints.maxHeight - (constraints.maxWidth - 2 * padding)) / 2;
+      } else {
+        verticalPadding = padding!;
+        horizontalPadding =
+            (constraints.maxWidth - (constraints.maxHeight - 2 * padding)) / 2;
+      }
+
+      return Stack(fit: StackFit.expand, children: [
+        Align(
+            alignment: Alignment.centerLeft,
+            child: Container(width: horizontalPadding, color: color)),
+        Align(
+            alignment: Alignment.centerRight,
+            child: Container(width: horizontalPadding, color: color)),
+        Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+                margin: EdgeInsets.only(
+                    left: horizontalPadding, right: horizontalPadding),
+                height: verticalPadding,
+                color: color)),
+        Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+                margin: EdgeInsets.only(
+                    left: horizontalPadding, right: horizontalPadding),
+                height: verticalPadding,
+                color: color)),
+        Container(
+          margin: EdgeInsets.symmetric(
+              horizontal: horizontalPadding, vertical: verticalPadding),
+          decoration: BoxDecoration(border: Border.all(color: Colors.cyan)),
+        )
+      ]);
     });
   }
 
@@ -391,62 +568,5 @@ class _MyHomePageState extends State<MyHomePage> {
       ));
     }
     return widgets;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    double screenWidth = MediaQuery.of(context).size.width;
-    double screenHeight = MediaQuery.of(context).size.height;
-    double imageSize =
-        min(screenWidth / board.numCols, screenHeight / board.numRows);
-    double dragSize = min(screenWidth, screenHeight) / 8.0;
-    if (dragTiles.isEmpty && tiles.isNotEmpty) {
-      dragTiles = _createDraggableTiles(dragSize);
-    }
-
-    List<Widget> widgets = [];
-    List<Widget> buttons = [];
-    if (_mode == Mode.history) {
-      widgets.addAll(getHistoryWidgets());
-      buttons.addAll(getHistoryButtons());
-    } else if (_mode == Mode.stats) {
-      widgets.addAll(getStatsWidgets());
-      buttons.addAll(getStatsButtons());
-    } else {
-      buttons.addAll(getGeneralButtons());
-      if (texter.getStatus == Status.success) {
-        // success ==> display board
-        widgets.addAll(getSuccessWidgets(imageSize));
-        buttons.addAll(getSuccessButtons());
-      }
-      if (_mode == Mode.view) {
-        widgets.addAll(getViewWidgets());
-        buttons.addAll(getViewButtons());
-      } else if (_mode == Mode.edit) {
-        widgets.addAll(getEditWidgets(dragSize));
-      }
-    }
-
-    return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Kingdomino Scorer - Beta',
-          ),
-        ),
-        body: Center(
-          child: _mode == Mode.history
-              ? Expanded(child: widgets[0])
-              : Column(
-                  mainAxisAlignment: _mode == Mode.stats
-                      ? MainAxisAlignment.spaceEvenly
-                      : MainAxisAlignment.center,
-                  crossAxisAlignment: _mode == Mode.stats
-                      ? CrossAxisAlignment.start
-                      : CrossAxisAlignment.center,
-                  children: widgets,
-                ),
-        ),
-        bottomNavigationBar:
-            ButtonBar(alignment: MainAxisAlignment.center, children: buttons));
   }
 }
