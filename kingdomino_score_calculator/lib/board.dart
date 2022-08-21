@@ -233,6 +233,16 @@ class Board {
     }
   }
 
+  void rotateClockwise() {
+    List<Tile> newBoard = [];
+    for (int x = 0; x < numCols; x++) {
+      for (int y = numRows - 1; y >= 0; y--) {
+        newBoard.add(board.elementAt(y * numCols + x));
+      }
+    }
+    board = newBoard;
+  }
+
   HashMap<String, int> getStatistics() {
     HashMap<String, int> stats = HashMap();
     for (Tile tile in board) {

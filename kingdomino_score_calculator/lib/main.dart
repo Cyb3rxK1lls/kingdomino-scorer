@@ -42,10 +42,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  //10.0.2.2 while using emulator, 10.129.16.113 if using device
-  final String _url = // "http://10.0.2.2:5000/file";
-      "http://192.168.1.4:8000/file";
-
+  final String _url = "http://192.168.1.180:8000/file";
   final ImagePicker _picker = ImagePicker();
   final int imageSize = 640;
   int _selectedHistoryItem = 0;
@@ -90,7 +87,6 @@ class _MyHomePageState extends State<MyHomePage> {
         'picture', await image.readAsBytes(),
         filename: image.name));
 
-    print("sending request to " + _url);
     var result = await request.send();
     String str = await result.stream.bytesToString();
     int resultStatus = int.parse(str.substring(str.length - 6, str.length - 3));
@@ -115,6 +111,7 @@ class _MyHomePageState extends State<MyHomePage> {
       switch (resultStatus) {
         case 200:
           board = Board(tiles);
+          board.rotateClockwise();
           tileWidgets = [];
           for (Tile tile in board.board) {
             tileWidgets.add(TileWidget(tile: tile));
@@ -238,9 +235,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (_mode == Mode.camera) {
       // return just the camera, nothing else
-      final scale = 1 /
-          (_controller.value.aspectRatio *
-              MediaQuery.of(context).size.aspectRatio);
       return Scaffold(
         appBar: topBar,
         body: FutureBuilder<void>(
@@ -249,11 +243,11 @@ class _MyHomePageState extends State<MyHomePage> {
             if (snapshot.connectionState == ConnectionState.done) {
               // return CameraPreview(_controller);
               return Transform.scale(
-                  scale: _controller.value.aspectRatio,
+                  scale: 1,
                   alignment: Alignment.center,
-                  child: Stack(fit: StackFit.expand, children: [
+                  child: Stack(fit: StackFit.loose, children: [
                     CameraPreview(_controller),
-                    cameraOverlay(padding: 80, color: const Color(0x55000000))
+                    cameraOverlay(padding: 50, color: const Color(0x55000000))
                   ]));
             } else {
               return const Center(child: CircularProgressIndicator());
@@ -505,11 +499,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   List<Widget> getHistoryButtons() {
     List<Widget> buttons = [];
-    buttons.add(IconButton(
-        icon: const Icon(Icons.remove_circle_outline_outlined),
-        onPressed: _changeMode,
-        tooltip: 'Exit history view',
-        color: Colors.red));
+    buttons.add(getClearButton());
     if (disker.history.isNotEmpty) {
       buttons.add(IconButton(
           icon: const Icon(Icons.check_circle),
@@ -556,6 +546,14 @@ class _MyHomePageState extends State<MyHomePage> {
         tooltip: 'Exit stats view',
         color: Colors.red));
     return buttons;
+  }
+
+  Widget getClearButton() {
+    return IconButton(
+        icon: const Icon(Icons.remove_circle_outline_outlined),
+        onPressed: _changeMode,
+        tooltip: 'Exit camera view',
+        color: Colors.red);
   }
 
   List<Widget> getStatsWidgets() {
